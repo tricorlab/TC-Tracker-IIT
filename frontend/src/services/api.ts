@@ -165,7 +165,11 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   }
 
   if (!response.ok) {
-    const errorMsg = data?.message || data?.error || `Request failed with status ${response.status}`;
+    let fallbackMsg = `Request failed with status ${response.status}`;
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      fallbackMsg = 'The backend server is starting up or temporarily unavailable. Please retry in a moment.';
+    }
+    const errorMsg = data?.message || data?.error || fallbackMsg;
     throw new Error(errorMsg);
   }
 

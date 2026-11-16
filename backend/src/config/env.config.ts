@@ -91,7 +91,7 @@ const secureConfig = isProduction || process.env.COOKIE_SECURE === 'true';
 
 export const config: EnvConfig = {
   port: parseInt(process.env.PORT || '5000', 10),
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, ''),
   sessionSecret,
   passwordPepper,
   isProduction,
