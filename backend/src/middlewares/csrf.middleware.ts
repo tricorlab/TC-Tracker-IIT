@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config/env.config.js';
 import { sessionService } from '../services/sessionService.js';
+import { isAllowedOrigin } from '../utils/origin.util.js';
 
 const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -27,15 +28,12 @@ export function validateOrigin(req: Request, res: Response, next: NextFunction):
     }
   }
 
-  const trustedOrigin = config.frontendUrl.replace(/\/$/, '');
-
-  // 1. If Origin/Referer is present, it MUST match the trusted frontend origin
+  // 1. If Origin/Referer is present, it MUST match a trusted frontend origin
   if (requestOrigin) {
-    const normalizedRequestOrigin = requestOrigin.replace(/\/$/, '');
-    if (normalizedRequestOrigin !== trustedOrigin) {
+    if (!isAllowedOrigin(requestOrigin)) {
       res.status(403).json({
         success: false,
-        message: `Forbidden: Untrusted cross-origin request from '${requestOrigin}'. Expected '${trustedOrigin}'.`,
+        message: `Forbidden: Untrusted cross-origin request from '${requestOrigin}'. Expected '${config.frontendUrl}'.`,
       });
       return;
     }

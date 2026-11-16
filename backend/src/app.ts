@@ -5,25 +5,22 @@ import { config } from './config/env.config.js';
 import apiRouter from './routes/index.js';
 import { errorHandler } from './middlewares/errorHandler.middleware.js';
 import { validateOrigin, validateCsrfToken } from './middlewares/csrf.middleware.js';
+import { isAllowedOrigin } from './utils/origin.util.js';
 
 const app = express();
 
 // Enable trust proxy so Express resolves req.ip correctly from reverse proxies (Nginx, Render, Cloudflare)
 app.set('trust proxy', 1);
 
-const trustedOrigin = config.frontendUrl.replace(/\/$/, '');
-
-// Enable strict CORS: credentials are only permitted for the explicitly trusted frontend origin
+// Enable CORS with dynamic origin authorization for trusted frontend environments
 app.use(
   cors({
     origin: (requestOrigin, callback) => {
-      // Allow requests with no origin (e.g. server-to-server or test runners)
-      if (!requestOrigin) return callback(null, true);
-      const normalized = requestOrigin.replace(/\/$/, '');
-      if (normalized === trustedOrigin) {
+      // Allow requests with no origin (e.g. server-to-server or test runners) or authorized origins
+      if (!requestOrigin || isAllowedOrigin(requestOrigin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS policy blocked access from origin: ${requestOrigin}`));
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
