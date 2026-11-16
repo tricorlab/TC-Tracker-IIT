@@ -140,10 +140,10 @@ describe('--- [MOCK TEST SUITE] TC Tracker Phase 2 Database Validation ---', () 
   });
 
   describe('6. Valid Roles, Attendance, and Notification Statuses', () => {
-    it('should accept only valid roles: Staff, Manager, Admin', () => {
+    it('should accept only valid roles: Staff, Admin', () => {
       assert.equal(validateRole('Staff').isValid, true);
-      assert.equal(validateRole('Manager').isValid, true);
       assert.equal(validateRole('Admin').isValid, true);
+      assert.equal(validateRole('Manager').isValid, false); // Manager role removed
       assert.equal(validateRole('SuperAdmin').isValid, false);
       assert.equal(validateRole('staff').isValid, false); // Strict case
     });

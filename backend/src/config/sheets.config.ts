@@ -26,6 +26,13 @@ export const SHEET_SCHEMAS: Record<SheetName, readonly string[]> = {
     'IsActive',
     'CreatedAt',
     'UpdatedAt',
+    'PasswordHash',
+    'MustChangePassword',
+    'ResetToken',
+    'ResetOtp',
+    'ResetTokenExpires',
+    'ResetOtpAttempts',
+    'PasswordChangedAt',
   ],
   [SHEET_NAMES.ATTENDANCE]: [
     'AttendanceID',
@@ -47,6 +54,7 @@ export const SHEET_SCHEMAS: Record<SheetName, readonly string[]> = {
     'Remarks',
     'SubmittedAt',
     'NotificationStatus',
+    'Status',
   ],
   [SHEET_NAMES.HOLIDAYS]: [
     'HolidayID',
@@ -101,7 +109,7 @@ export const SHEET_SCHEMAS: Record<SheetName, readonly string[]> = {
   ],
 } as const;
 
-export const VALID_ROLES = ['Staff', 'Manager', 'Admin'] as const;
+export const VALID_ROLES = ['Staff', 'Admin'] as const;
 export type ValidRole = (typeof VALID_ROLES)[number];
 
 export const VALID_ATTENDANCE_STATUSES = ['Present', 'Absent'] as const;
@@ -109,3 +117,6 @@ export type ValidAttendanceStatus = (typeof VALID_ATTENDANCE_STATUSES)[number];
 
 export const VALID_NOTIFICATION_STATUSES = ['Pending', 'Sent', 'Failed'] as const;
 export type ValidNotificationStatus = (typeof VALID_NOTIFICATION_STATUSES)[number];
+
+export const VALID_LEAVE_STATUSES = ['Recorded', 'Withdrawn', 'Cancelled'] as const;
+export type ValidLeaveStatus = (typeof VALID_LEAVE_STATUSES)[number];

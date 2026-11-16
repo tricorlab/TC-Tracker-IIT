@@ -24,6 +24,11 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 
+# Database Backups & Snapshots
+backups/
+*.backup.json
+tc-tracker-backup*.json
+
 # OS / Editor files
 .DS_Store
 Thumbs.db

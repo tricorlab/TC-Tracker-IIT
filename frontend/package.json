@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit -p tsconfig.app.json && vite build --configLoader native",
+    "test": "tsx --test src/tests/*.test.ts",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -23,6 +24,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.89.0",
+    "tsx": "^4.23.15",
     "typescript": "~7.0.2",
     "vite": "^8.3.5"
   }

@@ -1,4 +1,4 @@
-import { ValidRole, ValidAttendanceStatus, ValidNotificationStatus } from '../config/sheets.config.js';
+import { ValidRole, ValidAttendanceStatus, ValidNotificationStatus, ValidLeaveStatus } from '../config/sheets.config.js';
 
 export interface UserRow {
   UserID: string;
@@ -9,6 +9,13 @@ export interface UserRow {
   IsActive: boolean | string; // Boolean or "TRUE" / "FALSE"
   CreatedAt: string; // ISO 8601
   UpdatedAt: string; // ISO 8601
+  PasswordHash?: string;
+  MustChangePassword?: boolean | string; // Boolean or "TRUE" / "FALSE"
+  ResetToken?: string;
+  ResetOtp?: string;
+  ResetTokenExpires?: string; // ISO 8601
+  ResetOtpAttempts?: number | string;
+  PasswordChangedAt?: string; // ISO 8601
 }
 
 export interface AttendanceRow {
@@ -16,7 +23,7 @@ export interface AttendanceRow {
   UserID: string;
   AttendanceDate: string; // ISO YYYY-MM-DD
   Status: ValidAttendanceStatus;
-  MarkedBy: string; // UserID of Manager/Admin
+  MarkedBy: string; // UserID of Admin
   CreatedAt: string; // ISO 8601
   UpdatedAt: string; // ISO 8601
 }
@@ -32,7 +39,14 @@ export interface LeaveRequestRow {
   Remarks: string;
   SubmittedAt: string; // ISO 8601
   NotificationStatus: ValidNotificationStatus;
+  Status?: ValidLeaveStatus;
 }
+
+export type EnrichedLeaveRequestRow = LeaveRequestRow & {
+  FullName?: string;
+  Email?: string;
+  Role?: string;
+};
 
 export interface HolidayRow {
   HolidayID: string;
@@ -53,6 +67,9 @@ export interface LeaveBalanceRow {
   UsedLeave: number | string; // Decimal
   AvailableLeave: number | string; // Decimal: EarnedLeave + CarriedForward - UsedLeave
   UpdatedAt: string; // ISO 8601
+  isCarryForwardExpired?: boolean;
+  effectiveCarriedForward?: number;
+  transitionPending?: boolean;
 }
 
 export interface LeavePolicyRow {

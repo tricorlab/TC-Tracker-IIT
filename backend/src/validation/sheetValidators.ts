@@ -84,7 +84,7 @@ export function validateEmail(
 }
 
 /**
- * Validate Role must be Staff, Manager, or Admin.
+ * Validate Role must be Staff or Admin.
  */
 export function validateRole(role: string): ValidationResult {
   const errors: string[] = [];

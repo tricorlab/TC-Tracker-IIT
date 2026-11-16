@@ -1,9 +1,9 @@
-import { AuthenticatedUser } from '../services/googleAuth.service.js';
+import { AuthenticatedUserContext } from '../services/userService.js';
 
 declare global {
   namespace Express {
     interface Request {
-      user?: AuthenticatedUser;
+      user?: AuthenticatedUserContext;
     }
   }
 }
