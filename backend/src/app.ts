@@ -51,6 +51,18 @@ app.use(express.urlencoded({ extended: true }));
 app.use(validateOrigin);
 app.use(validateCsrfToken);
 
+// Root health/welcome endpoint
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'TC Tracker Backend API is running',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+    },
+  });
+});
+
 // REST API routes
 app.use('/api', apiRouter);
 
