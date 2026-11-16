@@ -53,15 +53,15 @@ describe('--- [PASSWORD AUTHENTICATION & FORGOT PASSWORD TEST SUITE] ---', () =>
       assert.equal(validation.isValid, true);
     });
 
-    it('should correctly hash and verify passwords using scrypt with server-side pepper', () => {
+    it('should correctly hash and verify passwords using scrypt with server-side pepper', async () => {
       const pwd = 'ValidPassword123!@#';
-      const hash = hashPassword(pwd);
+      const hash = await hashPassword(pwd);
       assert.ok(hash.startsWith('scrypt$v=2$'));
-      assert.equal(verifyPassword(pwd, hash), true);
-      assert.equal(verifyPassword('WrongPassword123!', hash), false);
+      assert.equal(await verifyPassword(pwd, hash), true);
+      assert.equal(await verifyPassword('WrongPassword123!', hash), false);
     });
 
-    it('should maintain backward compatibility with legacy unpeppered scrypt$v=1$ hashes', () => {
+    it('should maintain backward compatibility with legacy unpeppered scrypt$v=1$ hashes', async () => {
       const pwd = 'LegacyPassword123!@#';
       // Simulate legacy v1 hash without pepper
       const salt = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -69,15 +69,15 @@ describe('--- [PASSWORD AUTHENTICATION & FORGOT PASSWORD TEST SUITE] ---', () =>
       const legacyV1Hash = `scrypt$v=1$${salt}$${derivedKey}`;
 
       assert.equal(needsRehash(legacyV1Hash), true);
-      assert.equal(verifyPassword(pwd, legacyV1Hash), true);
-      assert.equal(verifyPassword('WrongPassword!', legacyV1Hash), false);
+      assert.equal(await verifyPassword(pwd, legacyV1Hash), true);
+      assert.equal(await verifyPassword('WrongPassword!', legacyV1Hash), false);
     });
 
-    it('should fail verification if incorrect pepper is used for v2 hash', () => {
+    it('should fail verification if incorrect pepper is used for v2 hash', async () => {
       const pwd = 'PepperProtected123!';
-      const hash = hashPassword(pwd, 'correct-secret-pepper-key-32chars!');
-      assert.equal(verifyPassword(pwd, hash, 'correct-secret-pepper-key-32chars!'), true);
-      assert.equal(verifyPassword(pwd, hash, 'wrong-intruder-pepper-key-32chars!'), false);
+      const hash = await hashPassword(pwd, 'correct-secret-pepper-key-32chars!');
+      assert.equal(await verifyPassword(pwd, hash, 'correct-secret-pepper-key-32chars!'), true);
+      assert.equal(await verifyPassword(pwd, hash, 'wrong-intruder-pepper-key-32chars!'), false);
     });
 
     it('should enforce password complexity requirements', () => {
@@ -125,7 +125,7 @@ describe('--- [PASSWORD AUTHENTICATION & FORGOT PASSWORD TEST SUITE] ---', () =>
       const tempPass = 'Temporary1!';
       const userWithTempPass: UserRow = {
         ...mockStaffUser,
-        PasswordHash: hashPassword(tempPass),
+        PasswordHash: await hashPassword(tempPass),
         MustChangePassword: 'TRUE',
       };
       testUserService.setMockUser(userWithTempPass);
@@ -138,7 +138,7 @@ describe('--- [PASSWORD AUTHENTICATION & FORGOT PASSWORD TEST SUITE] ---', () =>
     it('should reject invalid password', async () => {
       const userWithTempPass: UserRow = {
         ...mockStaffUser,
-        PasswordHash: hashPassword('CorrectPass1!'),
+        PasswordHash: await hashPassword('CorrectPass1!'),
       };
       testUserService.setMockUser(userWithTempPass);
 
@@ -152,7 +152,7 @@ describe('--- [PASSWORD AUTHENTICATION & FORGOT PASSWORD TEST SUITE] ---', () =>
       const tempPass = 'Temporary1!';
       const userWithTempPass: UserRow = {
         ...mockStaffUser,
-        PasswordHash: hashPassword(tempPass),
+        PasswordHash: await hashPassword(tempPass),
         MustChangePassword: 'TRUE',
       };
       testUserService.setMockUser(userWithTempPass);

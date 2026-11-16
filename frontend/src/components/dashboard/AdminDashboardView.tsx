@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchAdminDashboard, markDailyAttendance } from '../../services/api';
 import type { AdminDashboardData } from '../../services/api';
-import { useToast } from '../common/ToastContext';
+import { useToast } from '../common/useToast';
 import {
   RotateCcw,
   AlertCircle,
@@ -73,6 +73,7 @@ export const AdminDashboardView: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [quickMarking, setQuickMarking] = useState<boolean>(false);
+  const [fallbackTodayStr] = useState(() => new Date().toISOString().slice(0, 10));
 
   const loadData = async () => {
     setLoading(true);
@@ -500,7 +501,7 @@ export const AdminDashboardView: React.FC = () => {
             {data?.onLeaveToday && data.onLeaveToday.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {data.onLeaveToday.map((person, idx) => {
-                  const todayStr = data?.selectedDate || new Date().toISOString().slice(0, 10);
+                  const todayStr = data?.selectedDate || fallbackTodayStr;
                   const returnNote = formatReturnNotice(person.endDate, todayStr);
                   return (
                     <div

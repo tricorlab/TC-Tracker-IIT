@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useToast } from '../common/ToastContext';
+import { useToast } from '../common/useToast';
 import { Lock, Eye, EyeOff, ShieldAlert, CheckCircle2, XCircle } from 'lucide-react';
 
 export const ForceChangePasswordModal: React.FC = () => {

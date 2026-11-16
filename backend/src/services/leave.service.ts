@@ -236,11 +236,18 @@ export class LeaveService {
             existing.AvailableLeave = Math.max(0, Math.round((existing.EarnedLeave + effectiveCarried - used) * 100) / 100);
             existing.UpdatedAt = new Date().toISOString();
             try {
+              const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+                SHEET_NAMES.LEAVE_BALANCES,
+                'A',
+                existing.LeaveBalanceID
+              );
               const allBals = await googleSheetsService.getSheetRecords<LeaveBalanceRow>(SHEET_NAMES.LEAVE_BALANCES);
               const rowIdx = allBals.findIndex((b) => b.LeaveBalanceID === existing.LeaveBalanceID);
-              if (rowIdx !== -1) {
+              const sheetRow = actualRow !== -1 ? actualRow : (rowIdx !== -1 ? rowIdx + 2 : -1);
+
+              if (sheetRow !== -1) {
                 await googleSheetsService.updateSheetRange(
-                  `${SHEET_NAMES.LEAVE_BALANCES}!A${rowIdx + 2}:H${rowIdx + 2}`,
+                  `${SHEET_NAMES.LEAVE_BALANCES}!A${sheetRow}:H${sheetRow}`,
                   [[
                     existing.LeaveBalanceID,
                     existing.UserID,
@@ -580,12 +587,18 @@ export class LeaveService {
           existingDest.UpdatedAt = now;
 
           if (googleSheetsService.isLiveApiEnabled()) {
+            const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+              SHEET_NAMES.LEAVE_BALANCES,
+              'A',
+              existingDest.LeaveBalanceID
+            );
             const all = await this.getAllBalances();
             const idx = all.findIndex(
               (b) => b.UserID.trim() === item.userId.trim() && Number(b.CalendarYear) === destinationYear
             );
-            if (idx !== -1) {
-              const sheetRowIndex = idx + 2;
+            const sheetRowIndex = actualRow !== -1 ? actualRow : (idx !== -1 ? idx + 2 : -1);
+
+            if (sheetRowIndex !== -1) {
               try {
                 await googleSheetsService.updateSheetRange(
                   `${SHEET_NAMES.LEAVE_BALANCES}!A${sheetRowIndex}:H${sheetRowIndex}`,
@@ -927,12 +940,18 @@ export class LeaveService {
     currentBalance.UpdatedAt = new Date().toISOString();
 
     if (googleSheetsService.isLiveApiEnabled()) {
+      const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+        SHEET_NAMES.LEAVE_BALANCES,
+        'A',
+        currentBalance.LeaveBalanceID
+      );
       const all = await this.getAllBalances();
       const idx = all.findIndex(
         (b) => b.UserID.trim() === data.userId.trim() && Number(b.CalendarYear) === data.calendarYear
       );
-      if (idx !== -1) {
-        const sheetRowIndex = idx + 2;
+      const sheetRowIndex = actualRow !== -1 ? actualRow : (idx !== -1 ? idx + 2 : -1);
+
+      if (sheetRowIndex !== -1) {
         await googleSheetsService.updateSheetRange(
           `${SHEET_NAMES.LEAVE_BALANCES}!A${sheetRowIndex}:H${sheetRowIndex}`,
           [

@@ -1,6 +1,5 @@
 import React, { createContext, useState, useCallback } from 'react';
 import { CheckCircle2, AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
-import { useToast } from './useToast';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
@@ -111,5 +110,3 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     </ToastContext.Provider>
   );
 };
-
-export { useToast };

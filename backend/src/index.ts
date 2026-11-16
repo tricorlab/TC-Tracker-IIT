@@ -5,7 +5,7 @@ import { googleDriveBackupService } from './services/googleDriveBackup.service.j
 
 const PORT = config.port;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[TC Tracker Backend] Server is running on port ${PORT}`);
   console.log(`[TC Tracker Backend] Health check: http://localhost:${PORT}/api/health`);
   console.log(
@@ -17,3 +17,21 @@ app.listen(PORT, () => {
   // Initialize automated 6-month Google Drive backup scheduler (Format A: Spreadsheet Clone)
   googleDriveBackupService.initScheduledDriveBackup();
 });
+
+// Graceful shutdown handling for container stops and process restarts
+const shutdown = (signal: string) => {
+  console.log(`[TC Tracker Backend] Received ${signal}. Starting graceful shutdown...`);
+  googleDriveBackupService.stopScheduler();
+  server.close(() => {
+    console.log('[TC Tracker Backend] HTTP server closed gracefully.');
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    console.error('[TC Tracker Backend] Graceful shutdown timed out. Forcing process exit.');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

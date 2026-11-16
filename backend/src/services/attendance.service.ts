@@ -208,6 +208,8 @@ export class AttendanceService {
     const updatedOrCreated: AttendanceRow[] = [];
     const newRecordsToAppend: AttendanceRow[] = [];
     const newRowsToAppend: any[][] = [];
+    const rangesToBatchUpdate: Array<{ range: string; values: any[][] }> = [];
+    const rowIndicesToDelete: number[] = [];
 
     for (const entry of entries) {
       if (entry.status !== 'Not Marked') {
@@ -234,8 +236,14 @@ export class AttendanceService {
           const prevSnapshot = JSON.stringify(prevRecord);
 
           if (googleSheetsService.isLiveApiEnabled()) {
-            const sheetRowIndex = existingIdx + 2;
-            await googleSheetsService.deleteSheetRow(SHEET_NAMES.ATTENDANCE, sheetRowIndex);
+            const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+              SHEET_NAMES.ATTENDANCE,
+              'A',
+              prevRecord.AttendanceID
+            );
+            if (actualRow !== -1) {
+              rowIndicesToDelete.push(actualRow);
+            }
           } else {
             this.mockAttendance.splice(existingIdx, 1);
           }
@@ -269,10 +277,15 @@ export class AttendanceService {
         prevRecord.UpdatedAt = now;
 
         if (googleSheetsService.isLiveApiEnabled()) {
-          const sheetRowIndex = existingIdx + 2;
-          await googleSheetsService.updateSheetRange(
-            `${SHEET_NAMES.ATTENDANCE}!A${sheetRowIndex}:G${sheetRowIndex}`,
-            [
+          const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+            SHEET_NAMES.ATTENDANCE,
+            'A',
+            prevRecord.AttendanceID
+          );
+          const sheetRowIndex = actualRow !== -1 ? actualRow : existingIdx + 2;
+          rangesToBatchUpdate.push({
+            range: `${SHEET_NAMES.ATTENDANCE}!A${sheetRowIndex}:G${sheetRowIndex}`,
+            values: [
               [
                 prevRecord.AttendanceID,
                 prevRecord.UserID,
@@ -282,8 +295,8 @@ export class AttendanceService {
                 prevRecord.CreatedAt,
                 prevRecord.UpdatedAt,
               ],
-            ]
-          );
+            ],
+          });
         } else {
           this.mockAttendance[existingIdx] = prevRecord;
         }
@@ -335,6 +348,16 @@ export class AttendanceService {
 
         updatedOrCreated.push(newRecord);
       }
+    }
+
+    // Execute batch deletions safely in descending order
+    if (rowIndicesToDelete.length > 0 && googleSheetsService.isLiveApiEnabled()) {
+      await googleSheetsService.deleteSheetRows(SHEET_NAMES.ATTENDANCE, rowIndicesToDelete);
+    }
+
+    // Execute batch range updates in a single API call
+    if (rangesToBatchUpdate.length > 0 && googleSheetsService.isLiveApiEnabled()) {
+      await googleSheetsService.batchUpdateSheetRanges(rangesToBatchUpdate);
     }
 
     // Batch append all new records in a single Google Sheets API call

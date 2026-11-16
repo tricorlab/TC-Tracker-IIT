@@ -7,7 +7,7 @@ import {
   deleteHoliday,
 } from '../services/api';
 import type { HolidayItem } from '../services/api';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import {
   PlusCircle,
   Trash2,

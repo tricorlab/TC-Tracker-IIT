@@ -56,6 +56,15 @@ export function createRateLimiter(options: RateLimiterOptions) {
     const key = keyGenerator(req);
     const now = Date.now();
 
+    // Guard against memory exhaustion under distributed spoofing / bot floods
+    const MAX_TRACKED_ENTRIES = 10000;
+    if (hits.size >= MAX_TRACKED_ENTRIES && !hits.has(key)) {
+      const keysToEvict = Array.from(hits.keys()).slice(0, 1000);
+      for (const k of keysToEvict) {
+        hits.delete(k);
+      }
+    }
+
     let record = hits.get(key);
     if (!record) {
       record = { timestamps: [] };

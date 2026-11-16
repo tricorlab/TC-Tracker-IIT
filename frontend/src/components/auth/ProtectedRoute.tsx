@@ -33,10 +33,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Role authorization check
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // Staff members should never see the 403 page - redirect smoothly to Dashboard
-    if (user.role === 'Staff') {
-      return <Navigate to="/dashboard" replace />;
-    }
     return <Navigate to="/unauthorized" replace />;
   }
 

@@ -1,18 +1,10 @@
-import React, { useEffect } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { ShieldX, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const UnauthorizedPage: React.FC = () => {
   const { user, loading } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    // Staff members should never see this 403 Access Denied screen; redirect immediately to Dashboard
-    if (!loading && user?.role === 'Staff') {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [user, loading, navigate]);
 
   if (loading) {
     return (
@@ -21,11 +13,6 @@ export const UnauthorizedPage: React.FC = () => {
         <p className="text-sm text-slate-500 font-medium">Verifying access...</p>
       </div>
     );
-  }
-
-  // Staff members should never see 403 page; redirect immediately to Dashboard
-  if (user?.role === 'Staff') {
-    return <Navigate to="/dashboard" replace />;
   }
 
   // Unauthenticated users should be sent to login

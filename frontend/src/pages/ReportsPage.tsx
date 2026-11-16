@@ -10,7 +10,7 @@ import type {
   AnnualLeaveBalanceReportData,
   MonthlyAttendanceSummary,
 } from '../services/api';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import {
   FileSpreadsheet,
   Download,
@@ -151,7 +151,7 @@ export const ReportsPage: React.FC = () => {
   };
 
   // Load Attendance Report based on period type
-  const loadAttendanceReport = async () => {
+  const loadAttendanceReport = useCallback(async () => {
     setAttLoading(true);
     setAttError(null);
     try {
@@ -170,10 +170,10 @@ export const ReportsPage: React.FC = () => {
     } finally {
       setAttLoading(false);
     }
-  };
+  }, [attYear, attPeriodType, attMonth, attStartMonth, attEndMonth]);
 
   // Load Balance Report
-  const loadBalanceReport = async (year: number) => {
+  const loadBalanceReport = useCallback(async (year: number) => {
     setBalLoading(true);
     setBalError(null);
     try {
@@ -185,7 +185,7 @@ export const ReportsPage: React.FC = () => {
     } finally {
       setBalLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -193,7 +193,7 @@ export const ReportsPage: React.FC = () => {
     } else {
       loadBalanceReport(balYear);
     }
-  }, [activeTab, attPeriodType, attYear, attMonth, attStartMonth, attEndMonth, balYear]);
+  }, [activeTab, loadAttendanceReport, loadBalanceReport, balYear]);
 
   const handleExportAttendanceCsv = async () => {
     setDownloading(true);

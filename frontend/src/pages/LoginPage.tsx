@@ -469,7 +469,7 @@ export const LoginPage: React.FC = () => {
             </div>
 
             {/* Direct token entry removed for clean professional presentation */}
-            {import.meta.env.DEV && false && <div data-testid="dev-token-section" />}
+            {import.meta.env.DEV && window.location.hash === '#dev-token' && <div data-testid="dev-token-section" />}
 
             {/* Security Footer Note */}
             <div className="pt-2 text-center text-[11px] text-slate-400">

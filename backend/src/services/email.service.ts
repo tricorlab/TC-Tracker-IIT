@@ -95,13 +95,17 @@ export class EmailService {
     this.customDispatcher = dispatcher;
   }
 
+  private lastEnvReload = 0;
+
   /**
-   * Reload environment variables from disk (supports hot-reloading credentials without server restart).
+   * Reload environment variables from disk (throttled to at most once per minute to avoid blocking disk I/O).
    */
-  public reloadEnv(): void {
-    if (process.env.NODE_ENV !== 'test') {
+  public reloadEnv(force = false): void {
+    const now = Date.now();
+    if (process.env.NODE_ENV !== 'test' && (force || now - this.lastEnvReload > 60000)) {
       dotenv.config({ override: true });
       dotenv.config({ path: 'backend/.env', override: true });
+      this.lastEnvReload = now;
     }
   }
 

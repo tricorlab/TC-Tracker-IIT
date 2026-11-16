@@ -133,6 +133,21 @@ async function cachedApiFetch<T>(
   return promise;
 }
 
+export class ApiError extends Error {
+  public status: number;
+  public code?: string;
+  public data?: any;
+
+  constructor(message: string, status: number, code?: string, data?: any) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.data = data;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
 /**
  * Universal authenticated API fetcher with CSRF protection for mutating requests.
  */
@@ -170,7 +185,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
       fallbackMsg = 'The backend server is starting up or temporarily unavailable. Please retry in a moment.';
     }
     const errorMsg = data?.message || data?.error || fallbackMsg;
-    throw new Error(errorMsg);
+    throw new ApiError(errorMsg, response.status, data?.code, data);
   }
 
   // Update CSRF token if returned in response

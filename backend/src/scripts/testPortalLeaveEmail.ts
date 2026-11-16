@@ -14,7 +14,7 @@ async function main() {
   const payload = {
     leaveRequestId: 'LRQ-1794637173802-59',
     staffName: 'Staff Member (USR-001)',
-    staffEmail: 'akshaysreedharan07@gmail.com',
+    staffEmail: process.env.TEST_STAFF_EMAIL || process.env.ADMIN_GMAIL || 'staff@example.com',
     leaveType: 'Casual',
     startDate: '2026-11-21',
     endDate: '2026-11-23',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -44,7 +44,7 @@ export const MonthlyHealthCard: React.FC<MonthlyHealthCardProps> = ({
   onMonthChange,
   showDownloadSlip = true,
 }) => {
-  const currentDate = useMemo(() => new Date(), []);
+  const [currentDate] = useState(() => new Date());
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
 
@@ -63,10 +63,12 @@ export const MonthlyHealthCard: React.FC<MonthlyHealthCardProps> = ({
   // Verification UI state
   const [selectedRecord, setSelectedRecord] = useState<MonthlyAttendanceRecord | null>(null);
   const [showSlipModal, setShowSlipModal] = useState<boolean>(false);
-  const slipGeneratedOn = useMemo(() => new Date().toLocaleString('en-US'), [showSlipModal]);
+  const [slipGeneratedOn, setSlipGeneratedOn] = useState<string>(() => new Date().toLocaleString('en-US'));
 
   // Sync with initialSummary when prop changes and matches current selected period
-  useEffect(() => {
+  const [prevInitialSummary, setPrevInitialSummary] = useState(initialSummary);
+  if (initialSummary !== prevInitialSummary) {
+    setPrevInitialSummary(initialSummary);
     if (
       initialSummary &&
       initialSummary.year === selectedYear &&
@@ -74,7 +76,7 @@ export const MonthlyHealthCard: React.FC<MonthlyHealthCardProps> = ({
     ) {
       setSummary(initialSummary);
     }
-  }, [initialSummary, selectedYear, selectedMonth]);
+  }
 
   // Load monthly summary when year or month changes
   const loadMonthData = useCallback(
@@ -200,7 +202,10 @@ export const MonthlyHealthCard: React.FC<MonthlyHealthCardProps> = ({
           {showDownloadSlip && (
             <button
               type="button"
-              onClick={() => setShowSlipModal(true)}
+              onClick={() => {
+                setSlipGeneratedOn(new Date().toLocaleString('en-US'));
+                setShowSlipModal(true);
+              }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
               title="Print or save formal monthly verification statement"
             >

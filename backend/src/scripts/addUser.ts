@@ -14,17 +14,24 @@ async function main() {
     process.exit(1);
   }
 
-  // Parse command line arguments or use defaults
+  // Parse command line arguments or environment variables
   const args = process.argv.slice(2);
-  const targetEmail = (args[0] || 'devamruth6282@gmail.com').trim().toLowerCase();
-  const fullName = args[1] || 'Dev Amruth';
+  const targetEmail = (args[0] || process.env.ADMIN_INITIAL_EMAIL || '').trim().toLowerCase();
+  const fullName = args[1] || process.env.ADMIN_INITIAL_NAME || '';
   const role = args[2] || 'Admin';
-  const rawPassword = args[3] || 'DevAmruth@123';
+  const rawPassword = args[3] || process.env.ADMIN_INITIAL_PASSWORD || '';
+
+  if (!targetEmail || !fullName || !rawPassword) {
+    console.error('Error: Missing required parameters for user provisioning.');
+    console.error('Usage: npm run user:add <email> <fullName> [role] <password>');
+    console.error('Or set ADMIN_INITIAL_EMAIL, ADMIN_INITIAL_NAME, and ADMIN_INITIAL_PASSWORD in backend/.env');
+    process.exit(1);
+  }
 
   console.log(`Target Email   : ${targetEmail}`);
   console.log(`Full Name      : ${fullName}`);
   console.log(`Role           : ${role}`);
-  console.log(`Password       : ${rawPassword}`);
+  console.log('Password       : [PROTECTED]');
   console.log('----------------------------------------------------\n');
 
   const pwdValidation = validatePasswordStrength(rawPassword);
@@ -59,7 +66,7 @@ async function main() {
 
   const now = new Date().toISOString();
   const todayDate = now.slice(0, 10);
-  const passwordHash = hashPassword(rawPassword);
+  const passwordHash = await hashPassword(rawPassword);
 
   if (existingIdx !== -1) {
     const existing = existingUsers[existingIdx];

@@ -259,9 +259,10 @@ export class GoogleSheetsService {
 
   /**
    * Fetch all data rows as key-value objects mapped by header names.
+   * Uses range A1:ZZ to safely support sheets exceeding 26 columns without truncation.
    */
   public async getSheetRecords<T = Record<string, any>>(sheetName: string): Promise<T[]> {
-    const values = await this.getSheetValues(`${sheetName}!A1:Z`);
+    const values = await this.getSheetValues(`${sheetName}!A1:ZZ`);
     if (!values || values.length <= 1) {
       return [];
     }
@@ -390,6 +391,92 @@ export class GoogleSheetsService {
         }),
       true
     );
+  }
+
+  /**
+   * Delete multiple 1-indexed rows from a worksheet in descending order
+   * to guarantee that deleting an earlier row does not alter the indices of subsequent rows.
+   */
+  public async deleteSheetRows(sheetName: string, rowIndices: number[]): Promise<void> {
+    if (!this.isLiveApiEnabled() || !rowIndices || rowIndices.length === 0) {
+      return;
+    }
+    const metadata = await this.getSpreadsheetMetadata();
+    const sheet = metadata.sheets.find((s) => s.title === sheetName);
+    if (!sheet || sheet.sheetId === undefined) {
+      throw new Error(`Worksheet '${sheetName}' not found or missing sheetId`);
+    }
+
+    // Sort descending so deletions do not shift indices of remaining targets
+    const sorted = [...new Set(rowIndices)].sort((a, b) => b - a);
+
+    const sheets = await this.getClient();
+    const requests = sorted.map((rowIdx) => ({
+      deleteDimension: {
+        range: {
+          sheetId: sheet.sheetId,
+          dimension: 'ROWS',
+          startIndex: rowIdx - 1,
+          endIndex: rowIdx,
+        },
+      },
+    }));
+
+    await this.executeWithRetry(
+      () =>
+        sheets.spreadsheets.batchUpdate({
+          spreadsheetId: config.google.spreadsheetId,
+          requestBody: { requests },
+        }),
+      true
+    );
+  }
+
+  /**
+   * Batch update multiple sheet ranges in a single Google Sheets API call.
+   */
+  public async batchUpdateSheetRanges(
+    data: Array<{ range: string; values: any[][] }>
+  ): Promise<sheets_v4.Schema$BatchUpdateValuesResponse> {
+    if (!data || data.length === 0) return {};
+    const sheets = await this.getClient();
+    const response = await this.executeWithRetry(
+      () =>
+        sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: config.google.spreadsheetId,
+          requestBody: {
+            valueInputOption: 'USER_ENTERED',
+            data,
+          },
+        }),
+      true
+    );
+    return response.data;
+  }
+
+  /**
+   * Look up the 1-based row index in a worksheet by matching a value in a specific column (e.g. column 'A').
+   * Returns -1 if not found.
+   */
+  public async findRowIndexByColumnValue(
+    sheetName: string,
+    colLetter: string,
+    targetValue: string
+  ): Promise<number> {
+    if (!this.isLiveApiEnabled()) {
+      return -1;
+    }
+    const cleanTarget = String(targetValue || '').trim().toLowerCase();
+    if (!cleanTarget) return -1;
+
+    const values = await this.getSheetValues(`${sheetName}!${colLetter}:${colLetter}`);
+    for (let i = 0; i < values.length; i++) {
+      const cellVal = String(values[i]?.[0] || '').trim().toLowerCase();
+      if (cellVal === cleanTarget) {
+        return i + 1; // 1-based sheet row index
+      }
+    }
+    return -1;
   }
 
   /**

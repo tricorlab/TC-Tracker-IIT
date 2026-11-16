@@ -12,7 +12,7 @@ import type {
   LeaveBalanceItem,
 } from '../services/api';
 import { PageHeader } from '../components/common/PageHeader';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import {
   PlusCircle,
   Calendar,

@@ -13,7 +13,7 @@ import { PageHeader } from '../components/common/PageHeader';
 import { StatCard } from '../components/common/StatCard';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { CardSkeleton } from '../components/common/LoadingSkeleton';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import {
   Clock,
   PlusCircle,
@@ -112,7 +112,7 @@ export const MyLeavePage: React.FC = () => {
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   const userId = user?.userId;
-  const todayStr = new Date().toISOString().split('T')[0];
+  const [todayStr] = useState(() => new Date().toISOString().split('T')[0]);
 
   const loadData = useCallback(async () => {
     setLoading(true);

@@ -8,7 +8,7 @@ import type { DailyAttendanceResponse } from '../services/api';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SearchInput } from '../components/common/SearchInput';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import {
   Calendar,
@@ -36,12 +36,13 @@ export const AttendanceMarkingPage: React.FC = () => {
   const [saving, setSaving] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Sync date if URL parameter changes
-  useEffect(() => {
+  const [prevDateParam, setPrevDateParam] = useState(dateParam);
+  if (dateParam !== prevDateParam) {
+    setPrevDateParam(dateParam);
     if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) && dateParam !== selectedDate) {
       setSelectedDate(dateParam);
     }
-  }, [dateParam, selectedDate]);
+  }
 
   const loadAttendance = React.useCallback(async (date: string) => {
     setLoading(true);

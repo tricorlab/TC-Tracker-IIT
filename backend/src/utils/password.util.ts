@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import util from 'util';
+
+const scryptAsync = util.promisify(crypto.scrypt);
 
 /**
  * Utility for cryptographically secure password hashing, verification,
@@ -63,17 +66,29 @@ export function getPepper(overridePepper?: string): string {
 }
 
 /**
- * Hash password using Node's crypto.scrypt combined with a secret server-side pepper and unique 16-byte random salt.
+ * Hash password asynchronously using Node's crypto.scrypt combined with a secret server-side pepper and unique 16-byte random salt.
+ * Non-blocking: executes on libuv threadpool to keep Express event loop responsive under load.
  * Output format: `scrypt$v=2$<saltHex>$<derivedKeyHex>`
  */
-export function hashPassword(password: string, customPepper?: string): string {
+export async function hashPassword(password: string, customPepper?: string): Promise<string> {
   const salt = crypto.randomBytes(16).toString('hex');
   const pepper = getPepper(customPepper);
 
   // HMAC-SHA256 combines password with secret pepper
   const pepperedBytes = crypto.createHmac('sha256', pepper).update(password).digest();
 
-  // scrypt key derivation on the peppered digest
+  // Async scrypt key derivation off the main event loop
+  const derivedKey = (await scryptAsync(pepperedBytes, salt, 64)) as Buffer;
+  return `scrypt$v=2$${salt}$${derivedKey.toString('hex')}`;
+}
+
+/**
+ * Synchronous hashPassword fallback.
+ */
+export function hashPasswordSync(password: string, customPepper?: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const pepper = getPepper(customPepper);
+  const pepperedBytes = crypto.createHmac('sha256', pepper).update(password).digest();
   const derivedKey = crypto.scryptSync(pepperedBytes, salt, 64);
   return `scrypt$v=2$${salt}$${derivedKey.toString('hex')}`;
 }
@@ -87,13 +102,17 @@ export function needsRehash(storedHash: string): boolean {
 }
 
 /**
- * Verify a password against a stored scrypt hash in constant time.
+ * Verify a password asynchronously against a stored scrypt hash in constant time without blocking the event loop.
  * Supports:
  * - v2: Peppered HMAC-SHA256 + scrypt (`scrypt$v=2$<salt>$<key>`)
  * - v1: Legacy unpeppered scrypt (`scrypt$v=1$<salt>$<key>`)
  * - Legacy fallback format: `salt:key`
  */
-export function verifyPassword(password: string, storedHash: string, customPepper?: string): boolean {
+export async function verifyPassword(
+  password: string,
+  storedHash: string,
+  customPepper?: string
+): Promise<boolean> {
   if (!password || !storedHash) return false;
 
   const parts = storedHash.split('$');
@@ -107,10 +126,10 @@ export function verifyPassword(password: string, storedHash: string, customPeppe
     if (version === 'v=2') {
       const pepper = getPepper(customPepper);
       const pepperedBytes = crypto.createHmac('sha256', pepper).update(password).digest();
-      derivedKey = crypto.scryptSync(pepperedBytes, salt, 64);
+      derivedKey = (await scryptAsync(pepperedBytes, salt, 64)) as Buffer;
     } else if (version === 'v=1') {
       // Legacy unpeppered format
-      derivedKey = crypto.scryptSync(password, salt, 64);
+      derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
     } else {
       return false;
     }
@@ -121,6 +140,49 @@ export function verifyPassword(password: string, storedHash: string, customPeppe
   }
 
   // Fallback for legacy format: salt:key
+  if (storedHash.includes(':')) {
+    const [salt, key] = storedHash.split(':');
+    const derivedKey = (await scryptAsync(password, salt, 64)) as Buffer;
+    const originalBuffer = Buffer.from(key, 'hex');
+    if (originalBuffer.length !== derivedKey.length) return false;
+    return crypto.timingSafeEqual(originalBuffer, derivedKey);
+  }
+
+  return false;
+}
+
+/**
+ * Synchronous verifyPassword fallback.
+ */
+export function verifyPasswordSync(
+  password: string,
+  storedHash: string,
+  customPepper?: string
+): boolean {
+  if (!password || !storedHash) return false;
+
+  const parts = storedHash.split('$');
+  if (parts.length === 4 && parts[0] === 'scrypt') {
+    const version = parts[1];
+    const salt = parts[2];
+    const originalKey = parts[3];
+
+    let derivedKey: Buffer;
+    if (version === 'v=2') {
+      const pepper = getPepper(customPepper);
+      const pepperedBytes = crypto.createHmac('sha256', pepper).update(password).digest();
+      derivedKey = crypto.scryptSync(pepperedBytes, salt, 64);
+    } else if (version === 'v=1') {
+      derivedKey = crypto.scryptSync(password, salt, 64);
+    } else {
+      return false;
+    }
+
+    const originalBuffer = Buffer.from(originalKey, 'hex');
+    if (originalBuffer.length !== derivedKey.length) return false;
+    return crypto.timingSafeEqual(originalBuffer, derivedKey);
+  }
+
   if (storedHash.includes(':')) {
     const [salt, key] = storedHash.split(':');
     const derivedKey = crypto.scryptSync(password, salt, 64);

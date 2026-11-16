@@ -24,9 +24,20 @@ export function normalizeDateString(dateStr: string): string {
   if (parts.length === 3) {
     if (parts[2].length === 4) {
       const year = Number(parts[2]);
-      const month = Number(parts[1]).toString().padStart(2, '0');
-      const day = Number(parts[0]).toString().padStart(2, '0');
-      return `${year}-${month}-${day}`;
+      const first = Number(parts[0]);
+      const second = Number(parts[1]);
+      let day = first;
+      let month = second;
+
+      // Disambiguate MM/DD/YYYY vs DD/MM/YYYY:
+      // If second > 12 and first <= 12, format is unambiguously MM/DD/YYYY
+      if (second > 12 && first <= 12) {
+        month = first;
+        day = second;
+      }
+      // If first > 12 and second <= 12, format is unambiguously DD/MM/YYYY (default)
+
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     }
     if (parts[0].length === 4) {
       const year = Number(parts[0]);
@@ -167,6 +178,13 @@ export class LeavePolicyService {
     const minThreshold = Number(policy.MinimumContinuousCalendarDays) || 7;
     const isContinuousSevenDaysOrMore = totalCalendarDays >= minThreshold;
 
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const configuredWorkingDays = new Set(
+      (policy.WorkingDays || 'Monday,Tuesday,Wednesday,Thursday,Friday,Saturday')
+        .split(',')
+        .map((d) => d.trim().toLowerCase())
+    );
+
     const holidays = await holidayService.getAllHolidays();
     const holidayMap = new Map(holidays.map((h) => [h.HolidayDate.trim(), h.HolidayName.trim()]));
 
@@ -179,12 +197,16 @@ export class LeavePolicyService {
     while (currentUtc <= endUtc) {
       const curDate = new Date(currentUtc);
       const dateStr = curDate.toISOString().slice(0, 10);
+      const dayOfWeek = dayNames[curDate.getUTCDay()];
+      const isWorkingDayByPolicy = configuredWorkingDays.has(dayOfWeek.toLowerCase());
       const isSun = curDate.getUTCDay() === 0;
       const holidayName = holidayMap.get(dateStr);
 
       if (isSun) {
         sundaysCount++;
         excludedDates.push(`${dateStr} (Sunday)`);
+      } else if (!isWorkingDayByPolicy) {
+        excludedDates.push(`${dateStr} (Weekly Off: ${dayOfWeek})`);
       } else if (holidayName) {
         holidaysCount++;
         excludedDates.push(`${dateStr} (Holiday: ${holidayName})`);

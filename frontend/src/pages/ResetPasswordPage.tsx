@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { resetPasswordApi } from '../services/api';
 import {
@@ -31,11 +31,6 @@ export const ResetPasswordPage: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const isLinkFlow = Boolean(urlToken && urlToken.length > 10);
-
-  useEffect(() => {
-    if (urlEmail) setEmail(urlEmail);
-    if (urlToken) setTokenOrOtp(urlToken);
-  }, [urlEmail, urlToken]);
 
   // Password rules validation
   const rules = [

@@ -10,7 +10,7 @@ import type { UserItem, UserRole } from '../services/api';
 import { PageHeader } from '../components/common/PageHeader';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SearchInput } from '../components/common/SearchInput';
-import { useToast } from '../components/common/ToastContext';
+import { useToast } from '../components/common/useToast';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import {
   UserPlus,

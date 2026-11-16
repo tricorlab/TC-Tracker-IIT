@@ -1,14 +1,15 @@
 import { Request, Response } from 'express';
-import { userService, UserVerificationError } from '../services/userService.js';
+import { userService, UserVerificationError, sanitizeUserResponse } from '../services/userService.js';
 
 export class UserController {
   /**
    * Get all registered users (Accessible to Admin).
+   * Sensitive security fields (PasswordHash, ResetToken, ResetOtp) are sanitized before sending.
    */
   public async getAllUsers(req: Request, res: Response): Promise<void> {
     try {
       const users = await userService.getAllUsers();
-      res.json({ success: true, data: users });
+      res.json({ success: true, data: users.map(sanitizeUserResponse) });
     } catch (err: any) {
       const status = err instanceof UserVerificationError ? err.statusCode : 500;
       res.status(status).json({ success: false, message: err.message });
@@ -37,7 +38,7 @@ export class UserController {
 
       res.status(201).json({
         success: true,
-        data: newUser,
+        data: sanitizeUserResponse(newUser),
         message: 'User created successfully.',
       });
     } catch (err: any) {
@@ -70,7 +71,7 @@ export class UserController {
 
       res.json({
         success: true,
-        data: updatedUser,
+        data: sanitizeUserResponse(updatedUser),
         message: 'User updated successfully.',
       });
     } catch (err: any) {

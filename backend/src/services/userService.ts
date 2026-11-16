@@ -40,6 +40,20 @@ export function sanitizeUserForLog(user: UserRow | Partial<UserRow>): Record<str
   return sanitized;
 }
 
+/**
+ * Sanitizes user records for public API responses, ensuring sensitive credentials
+ * and tokens are never leaked to client browsers.
+ */
+export function sanitizeUserResponse(user: UserRow | Partial<UserRow>): Record<string, any> {
+  const sanitized: Record<string, any> = { ...user };
+  delete sanitized.PasswordHash;
+  delete sanitized.ResetToken;
+  delete sanitized.ResetOtp;
+  delete sanitized.ResetTokenExpires;
+  delete sanitized.ResetOtpAttempts;
+  return sanitized;
+}
+
 export interface CreateUserData {
   fullName: string;
   email: string;
@@ -317,7 +331,7 @@ export class UserService {
 
     // Generate secure temporary random password for onboarding
     const tempPassword = generateRandomPassword(10);
-    const passwordHash = hashPassword(tempPassword);
+    const passwordHash = await hashPassword(tempPassword);
 
     const newUser: UserRow = {
       UserID: newUserId,
@@ -513,11 +527,17 @@ export class UserService {
     };
 
     if (googleSheetsService.isLiveApiEnabled()) {
+      const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+        SHEET_NAMES.USERS,
+        'A',
+        targetUserId
+      );
       const userIdx = allUsers.findIndex(
         (u) => u.UserID.trim() === targetUserId.trim()
       );
-      if (userIdx !== -1) {
-        const sheetRowIndex = userIdx + 2;
+      const sheetRowIndex = actualRow !== -1 ? actualRow : (userIdx !== -1 ? userIdx + 2 : -1);
+
+      if (sheetRowIndex !== -1) {
         try {
           await googleSheetsService.updateSheetRange(
             `${SHEET_NAMES.USERS}!A${sheetRowIndex}:O${sheetRowIndex}`,
@@ -577,13 +597,18 @@ export class UserService {
       return;
     }
 
+    const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+      SHEET_NAMES.USERS,
+      'A',
+      updatedUser.UserID
+    );
     const allUsers = await this.getAllUsers();
     const userIdx = allUsers.findIndex(
       (u) => (u.UserID || '').trim() === updatedUser.UserID.trim()
     );
+    const sheetRowIndex = actualRow !== -1 ? actualRow : (userIdx !== -1 ? userIdx + 2 : -1);
 
-    if (userIdx !== -1) {
-      const sheetRowIndex = userIdx + 2;
+    if (sheetRowIndex !== -1) {
       try {
         await googleSheetsService.updateSheetRange(
           `${SHEET_NAMES.USERS}!A${sheetRowIndex}:O${sheetRowIndex}`,
@@ -646,7 +671,7 @@ export class UserService {
       throw new UserVerificationError('Invalid email or password.', 401);
     }
 
-    const isMatch = verifyPassword(plainPassword, user.PasswordHash);
+    const isMatch = await verifyPassword(plainPassword, user.PasswordHash);
     if (!isMatch) {
       throw new UserVerificationError('Invalid email or password.', 401);
     }
@@ -654,7 +679,7 @@ export class UserService {
     // Transparent zero-downtime hash migration:
     // If the account is using a legacy v1 unpeppered hash, upgrade it to peppered v2 in the background
     if (needsRehash(user.PasswordHash)) {
-      const upgradedHash = hashPassword(plainPassword);
+      const upgradedHash = await hashPassword(plainPassword);
       const rehashedUser: UserRow = {
         ...user,
         PasswordHash: upgradedHash,
@@ -698,7 +723,7 @@ export class UserService {
 
     // If an existing password hash is present, verify current password
     if (user.PasswordHash && user.PasswordHash.trim().length > 0) {
-      const isCurrentValid = verifyPassword(currentPassword, user.PasswordHash);
+      const isCurrentValid = await verifyPassword(currentPassword, user.PasswordHash);
       if (!isCurrentValid) {
         throw new UserVerificationError('Current password is incorrect.', 400);
       }
@@ -714,7 +739,7 @@ export class UserService {
       throw new UserVerificationError('New password must be different from your current password.', 400);
     }
 
-    const newHash = hashPassword(newPassword);
+    const newHash = await hashPassword(newPassword);
     const now = new Date().toISOString();
 
     const updatedUser: UserRow = {
@@ -911,7 +936,7 @@ export class UserService {
       throw new UserVerificationError(strength.errors.join(' '), 400);
     }
 
-    const newHash = hashPassword(newPassword);
+    const newHash = await hashPassword(newPassword);
     const nowIso = new Date().toISOString();
 
     const updatedUser: UserRow = {
@@ -960,7 +985,7 @@ export class UserService {
     }
 
     const tempPassword = generateRandomPassword(10);
-    const passwordHash = hashPassword(tempPassword);
+    const passwordHash = await hashPassword(tempPassword);
     const nowIso = new Date().toISOString();
 
     const updatedUser: UserRow = {
