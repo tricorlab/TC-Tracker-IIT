@@ -1,4 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').trim();
+export const API_BASE_URL = rawApiBaseUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+
+export function resolveApiUrl(endpoint: string): string {
+  const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return `${API_BASE_URL}${clean}`;
+}
 
 export interface HealthResponse {
   success: boolean;
@@ -146,7 +152,7 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(resolveApiUrl(endpoint), {
     ...options,
     headers,
     credentials: 'include',
@@ -1156,7 +1162,7 @@ export async function downloadReportCsv(
     headers.set('X-CSRF-Token', csrf);
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(resolveApiUrl(endpoint), {
     method: 'GET',
     headers,
     credentials: 'include',
@@ -1283,7 +1289,7 @@ export async function downloadDatabaseBackupApi(): Promise<{ checksum?: string; 
     headers.set('X-CSRF-Token', csrf);
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/dashboard/backup/export`, {
+  const response = await fetch(resolveApiUrl('/api/dashboard/backup/export'), {
     method: 'GET',
     headers,
     credentials: 'include',

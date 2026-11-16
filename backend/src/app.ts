@@ -51,6 +51,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(validateOrigin);
 app.use(validateCsrfToken);
 
+// Normalize double slashes in incoming request URLs (e.g. //api -> /api)
+app.use((req, _res, next) => {
+  if (req.url && req.url.startsWith('//')) {
+    req.url = req.url.replace(/^\/+/, '/');
+  }
+  next();
+});
+
 // Root health/welcome endpoint
 app.get('/', (_req, res) => {
   res.status(200).json({
@@ -63,7 +71,8 @@ app.get('/', (_req, res) => {
   });
 });
 
-// REST API routes
+// REST API routes (support both /api and fallback /api/api if client baseURL included /api)
+app.use('/api/api', apiRouter);
 app.use('/api', apiRouter);
 
 // 404 Route handler
