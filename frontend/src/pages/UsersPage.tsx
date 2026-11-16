@@ -117,7 +117,7 @@ export const UsersPage: React.FC = () => {
 
     setSubmittingAdd(true);
     try {
-      await createUser({
+      const res: any = await createUser({
         fullName: addFullName.trim(),
         email: addEmail.trim().toLowerCase(),
         role: addRole,
@@ -125,9 +125,15 @@ export const UsersPage: React.FC = () => {
         isActive: addIsActive,
       });
 
-      const msg = `User '${addFullName}' created successfully.`;
+      const isEmailSent = res?.emailDispatched;
+      const msg = res?.message || `User '${addFullName}' created successfully.`;
+
       setSuccess(msg);
-      toast.success(msg, 'User Added');
+      if (isEmailSent === false) {
+        toast.warning(msg, 'User Added (Email Notice)');
+      } else {
+        toast.success(msg, 'User Added');
+      }
       setIsAddModalOpen(false);
       await loadUsers();
     } catch (err: any) {

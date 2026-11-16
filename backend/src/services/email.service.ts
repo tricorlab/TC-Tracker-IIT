@@ -119,8 +119,11 @@ export class EmailService {
     this.reloadEnv();
 
     // 1. Check Gmail SMTP / App Password
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailAppPassword = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
+    const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
+    const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
+    const gmailAppPassword = rawPass
+      ? rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim()
+      : '';
     if (gmailUser && gmailAppPassword) {
       return true;
     }
@@ -150,9 +153,11 @@ export class EmailService {
    */
   public getNodemailerTransporter(): { transporter: Transporter; from: string } | null {
     this.reloadEnv();
-    const gmailUser = process.env.GMAIL_USER?.trim();
+    const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
     const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
-    const gmailAppPassword = rawPass ? rawPass.replace(/\s+/g, '').trim() : '';
+    const gmailAppPassword = rawPass
+      ? rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim()
+      : '';
 
     if (gmailUser && gmailAppPassword) {
       const transporter = nodemailer.createTransport({
@@ -780,7 +785,7 @@ Allocated At:      ${attemptedAt}
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env to send live emails.';
+      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1132,7 +1137,7 @@ If you have any questions, please contact your administrator.
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env to send live emails.';
+      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1337,7 +1342,7 @@ IMPORTANT:
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env to send live emails.';
+      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
     }
 
     const logRecord: EmailLogRow = {

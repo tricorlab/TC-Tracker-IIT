@@ -36,10 +36,19 @@ export class UserController {
         isActive,
       });
 
+      const emailDispatched = (newUser as any).emailDispatched;
+      const emailError = (newUser as any).emailError;
+
       res.status(201).json({
         success: true,
         data: sanitizeUserResponse(newUser),
-        message: 'User created successfully.',
+        emailDispatched,
+        emailError,
+        message: emailDispatched
+          ? 'User created successfully and welcome credentials email sent.'
+          : emailError
+          ? `User created successfully, but welcome email could not be sent: ${emailError}`
+          : 'User created successfully.',
       });
     } catch (err: any) {
       const status = err instanceof UserVerificationError ? err.statusCode : 400;

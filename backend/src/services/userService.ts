@@ -381,14 +381,24 @@ export class UserService {
     this.cachedRecords = [];
 
     // Dispatch welcome onboarding email with login ID and temporary password
+    let emailDispatched = false;
+    let emailError: string | null = null;
     try {
-      await emailService.sendWelcomeCredentialsEmail({
+      const emailResult = await emailService.sendWelcomeCredentialsEmail({
         staffName: newUser.FullName,
         staffEmail: newUser.Email,
         temporaryPassword: tempPassword,
         loginUrl: `${config.frontendUrl}/login`,
       });
+      emailDispatched = emailResult.dispatched;
+      if (!emailResult.dispatched) {
+        emailError = emailResult.log?.ErrorMessage || 'Email delivery failed';
+        console.warn(`[UserService] Welcome onboarding email to ${newUser.Email} was not sent: ${emailError}`);
+      } else {
+        console.log(`[UserService] Welcome onboarding email sent successfully to ${newUser.Email}`);
+      }
     } catch (emailErr: any) {
+      emailError = emailErr.message;
       console.error('[UserService] Failed to dispatch welcome onboarding email:', emailErr.message);
     }
 
@@ -403,6 +413,8 @@ export class UserService {
 
     return {
       ...newUser,
+      emailDispatched,
+      emailError,
       // Pass temporaryPassword transiently for administrative feedback / testing
       ...(tempPassword ? { temporaryPassword: tempPassword } : {}),
     } as any;

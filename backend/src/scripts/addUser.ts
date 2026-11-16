@@ -3,6 +3,7 @@ import { SHEET_NAMES, SHEET_SCHEMAS } from '../config/sheets.config.js';
 import { UserRow } from '../types/database.types.js';
 import { hashPassword, validatePasswordStrength } from '../utils/password.util.js';
 import { validateWorksheetHeaders } from '../validation/sheetValidators.js';
+import { emailService } from '../services/email.service.js';
 
 async function main() {
   console.log('====================================================');
@@ -132,6 +133,27 @@ async function main() {
     console.log(`Role               : ${updatedUser.Role}`);
     console.log(`MustChangePassword : TRUE (User will be prompted to reset upon login)`);
     console.log('====================================================\n');
+
+    if (emailService.isEmailConfigured()) {
+      console.log(`[Email] Dispatching credentials update email to ${updatedUser.Email}...`);
+      try {
+        const emailResult = await emailService.sendWelcomeCredentialsEmail({
+          staffName: updatedUser.FullName,
+          staffEmail: updatedUser.Email,
+          temporaryPassword: rawPassword,
+          loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`,
+        });
+        if (emailResult.dispatched) {
+          console.log(`[Email] SUCCESS: Credentials update email delivered to ${updatedUser.Email}!`);
+        } else {
+          console.warn(`[Email] WARNING: Email delivery failed: ${emailResult.log.ErrorMessage}`);
+        }
+      } catch (e: any) {
+        console.warn(`[Email] Failed to send email: ${e.message}`);
+      }
+    } else {
+      console.log(`[Email] NOTE: GMAIL_USER & GMAIL_APP_PASSWORD are not configured; skipping email dispatch.`);
+    }
     return;
   }
 
@@ -190,6 +212,27 @@ async function main() {
   console.log(`Role               : ${newUser.Role}`);
   console.log(`MustChangePassword : TRUE (User will be prompted to change upon login)`);
   console.log('====================================================\n');
+
+  if (emailService.isEmailConfigured()) {
+    console.log(`[Email] Dispatching onboarding credentials email to ${newUser.Email}...`);
+    try {
+      const emailResult = await emailService.sendWelcomeCredentialsEmail({
+        staffName: newUser.FullName,
+        staffEmail: newUser.Email,
+        temporaryPassword: rawPassword,
+        loginUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`,
+      });
+      if (emailResult.dispatched) {
+        console.log(`[Email] SUCCESS: Welcome onboarding email delivered to ${newUser.Email}!`);
+      } else {
+        console.warn(`[Email] WARNING: Email delivery failed: ${emailResult.log.ErrorMessage}`);
+      }
+    } catch (e: any) {
+      console.warn(`[Email] Failed to send email: ${e.message}`);
+    }
+  } else {
+    console.log(`[Email] NOTE: GMAIL_USER & GMAIL_APP_PASSWORD are not configured; skipping email dispatch.`);
+  }
 }
 
 main().catch((err) => {
