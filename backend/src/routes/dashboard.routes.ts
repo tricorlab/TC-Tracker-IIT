@@ -18,6 +18,8 @@ router.get('/manager', requireAdmin, (req, res) => dashboardController.getAdmin(
 router.get('/admin', requireAdmin, (req, res) => dashboardController.getAdmin(req, res));
 router.get('/activity-logs', requireAdmin, (req, res) => dashboardController.getActivityLogs(req, res));
 router.get('/email-logs', requireAdmin, (req, res) => dashboardController.getEmailLogs(req, res));
+router.post('/email-test', requireAdmin, (req, res) => dashboardController.testEmailConnection(req, res));
+router.get('/email-test', requireAdmin, (req, res) => dashboardController.testEmailConnection(req, res));
 router.get('/database-doctor', requireAdmin, (req, res) => dashboardController.getDatabaseDiagnostics(req, res));
 router.post('/database-doctor/repair', requireAdmin, (req, res) => dashboardController.executeDatabaseRepair(req, res));
 

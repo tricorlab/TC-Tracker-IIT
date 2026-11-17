@@ -57,6 +57,18 @@ export class DashboardController {
   }
 
   /**
+   * Diagnostic verification of the email connection for Admin inspection.
+   */
+  public async testEmailConnection(_req: Request, res: Response): Promise<void> {
+    try {
+      const result = await emailService.verifyConnection();
+      res.json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
    * Run read-only database diagnostics (Admin only).
    */
   public async getDatabaseDiagnostics(_req: Request, res: Response): Promise<void> {

@@ -1,3 +1,12 @@
+import dns from 'dns';
+
+// Force IPv4 first DNS resolution to prevent outbound SMTP and Google API timeouts on cloud hosting (Render, Docker, AWS)
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {
+  // Fallback for runtimes where setDefaultResultOrder is not available
+}
+
 import app from './app.js';
 import { config } from './config/env.config.js';
 import { googleSheetsService } from './services/googleSheets.service.js';

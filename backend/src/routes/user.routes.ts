@@ -16,4 +16,7 @@ router.post('/', requireAdmin, (req, res) => userController.createUser(req, res)
 // Only Admin can update user details
 router.put('/:id', requireAdmin, (req, res) => userController.updateUser(req, res));
 
+// Only Admin can delete or deactivate users
+router.delete('/:id', requireAdmin, (req, res) => userController.deleteUser(req, res));
+
 export default router;

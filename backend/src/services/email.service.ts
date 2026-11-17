@@ -149,9 +149,33 @@ export class EmailService {
   }
 
   /**
-   * Helper to create a Nodemailer transporter if Gmail App Password or SMTP is configured.
+   * Helper to format descriptive and actionable error messages for SMTP failures.
    */
-  public getNodemailerTransporter(): { transporter: Transporter; from: string } | null {
+  public formatSmtpError(err: any): string {
+    const rawMsg = err?.message || 'SMTP transmission failure';
+    const cleanMsg = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+
+    if (err?.code === 'EAUTH' || /535|Username and Password not accepted/i.test(cleanMsg)) {
+      return `Gmail Authentication Failed (535): Google rejected your credentials. Ensure GMAIL_USER is correct, 2-Step Verification is active on that Google account, and GMAIL_APP_PASSWORD is a valid 16-character App Password (not your personal Google account password). If deploying from a new cloud IP (e.g. Render/AWS), check Google Security Alerts to approve the login. Details: ${cleanMsg}`;
+    }
+
+    if (err?.code === 'ETIMEDOUT' || err?.code === 'ESOCKETTIMEDOUT' || err?.code === 'ENETUNREACH' || /timeout/i.test(cleanMsg)) {
+      return `SMTP Connection Timed Out: Outbound connection to Google Mail servers timed out on ports 465 and 587. The hosting platform firewall may be restricting outbound SMTP traffic or network egress. Details: ${cleanMsg}`;
+    }
+
+    if (err?.code === 'ECONNREFUSED') {
+      return `SMTP Connection Refused: The mail server refused connection on ports 465/587. Details: ${cleanMsg}`;
+    }
+
+    return cleanMsg;
+  }
+
+  /**
+   * Helper to create a Nodemailer transporter if Gmail App Password or SMTP is configured.
+   * Configured with family: 4 (force IPv4) and explicit connection timeouts
+   * to guarantee reliable delivery on cloud hosting environments (Render, Docker, AWS).
+   */
+  public getNodemailerTransporter(portOverride?: number): { transporter: Transporter; from: string; port: number } | null {
     this.reloadEnv();
     const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
     const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
@@ -160,21 +184,32 @@ export class EmailService {
       : '';
 
     if (gmailUser && gmailAppPassword) {
+      const port = portOverride || (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465);
+      const isSecure = port === 465;
+
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: 'smtp.gmail.com',
+        port,
+        secure: isSecure,
         auth: {
           user: gmailUser,
           pass: gmailAppPassword,
         },
-      });
+        family: 4, // Critical for cloud platforms (Render, Docker, AWS) to avoid IPv6 unreachable timeouts
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+      } as any);
+
       return {
         transporter,
         from: gmailUser,
+        port,
       };
     }
 
     const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const smtpPort = portOverride || parseInt(process.env.SMTP_PORT || '587', 10);
     const smtpUser = process.env.SMTP_USER;
     const smtpPass = process.env.SMTP_PASS;
     const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
@@ -188,14 +223,82 @@ export class EmailService {
           user: smtpUser,
           pass: smtpPass,
         },
-      });
+        family: 4,
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+      } as any);
       return {
         transporter,
         from: smtpUser,
+        port: smtpPort,
       };
     }
 
     return null;
+  }
+
+  /**
+   * Helper to send email via Nodemailer with dual-port fallback (465 SSL <-> 587 STARTTLS)
+   * if a network or connection timeout occurs on cloud deployments.
+   */
+  public async sendNodemailerMail(options: {
+    fromName: string;
+    fromEmail: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    replyTo?: string;
+  }): Promise<{ success: boolean; errorMessage?: string }> {
+    const primary = this.getNodemailerTransporter();
+    if (!primary) {
+      return {
+        success: false,
+        errorMessage: 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.',
+      };
+    }
+
+    try {
+      await primary.transporter.sendMail({
+        from: `"${options.fromName}" <${primary.from}>`,
+        to: options.to,
+        replyTo: options.replyTo,
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+      });
+      return { success: true };
+    } catch (err: any) {
+      const isNetworkErr =
+        err?.code === 'ETIMEDOUT' ||
+        err?.code === 'ESOCKETTIMEDOUT' ||
+        err?.code === 'ECONNREFUSED' ||
+        err?.code === 'ENETUNREACH';
+
+      if (isNetworkErr) {
+        // Try fallback port (587 if 465 was used, or 465 if 587 was used)
+        const fallbackPort = primary.port === 465 ? 587 : 465;
+        const fallback = this.getNodemailerTransporter(fallbackPort);
+        if (fallback) {
+          try {
+            await fallback.transporter.sendMail({
+              from: `"${options.fromName}" <${fallback.from}>`,
+              to: options.to,
+              replyTo: options.replyTo,
+              subject: options.subject,
+              text: options.text,
+              html: options.html,
+            });
+            return { success: true };
+          } catch (fallbackErr: any) {
+            return { success: false, errorMessage: this.formatSmtpError(fallbackErr) };
+          }
+        }
+      }
+
+      return { success: false, errorMessage: this.formatSmtpError(err) };
+    }
   }
 
   /**
@@ -535,21 +638,22 @@ Office of Administration
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
       } else if (nodemailerTransporter) {
-        try {
-          await nodemailerTransporter.transporter.sendMail({
-            from: `"TC Tracker Leave Management" <${nodemailerTransporter.from}>`,
-            to: recipient.email,
-            replyTo: payload.staffEmail ? `"${payload.staffName}" <${payload.staffEmail}>` : undefined,
-            subject: emailSubject,
-            text: textBody,
-            html: htmlBody,
-          });
+        const sendResult = await this.sendNodemailerMail({
+          fromName: 'TC Tracker Leave Management',
+          fromEmail: nodemailerTransporter.from,
+          to: recipient.email,
+          replyTo: payload.staffEmail ? `"${payload.staffName}" <${payload.staffEmail}>` : undefined,
+          subject: emailSubject,
+          text: textBody,
+          html: htmlBody,
+        });
+
+        if (sendResult.success) {
           deliveryStatus = 'Sent';
           sentAt = new Date().toISOString();
-        } catch (err: any) {
+        } else {
           deliveryStatus = 'Failed';
-          const rawMsg = err?.message || 'Nodemailer SMTP transmission failure';
-          errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+          errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
         }
       } else if (gmailClient) {
         try {
@@ -748,20 +852,21 @@ Allocated At:      ${attemptedAt}
       deliveryStatus = 'Sent';
       sentAt = new Date().toISOString();
     } else if (nodemailerTransporter && normalizedRecipient) {
-      try {
-        await nodemailerTransporter.transporter.sendMail({
-          from: `"TC Tracker Leave Management" <${nodemailerTransporter.from}>`,
-          to: normalizedRecipient,
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
+      const sendResult = await this.sendNodemailerMail({
+        fromName: 'TC Tracker Leave Management',
+        fromEmail: nodemailerTransporter.from,
+        to: normalizedRecipient,
+        subject: emailSubject,
+        text: textBody,
+        html: htmlBody,
+      });
+
+      if (sendResult.success) {
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
-      } catch (err: any) {
+      } else {
         deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Nodemailer SMTP transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
       }
     } else if (gmailClient && normalizedRecipient) {
       try {
@@ -892,19 +997,21 @@ Allocated At:      ${attemptedAt}
       deliveryStatus = 'Sent';
       sentAt = new Date().toISOString();
     } else if (nodemailerTransporter) {
-      try {
-        await nodemailerTransporter.transporter.sendMail({
-          from: `"TC Tracker Backup Service" <${nodemailerTransporter.from}>`,
-          to: adminEmail,
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
+      const sendResult = await this.sendNodemailerMail({
+        fromName: 'TC Tracker Backup Service',
+        fromEmail: nodemailerTransporter.from,
+        to: adminEmail,
+        subject,
+        text: textContent,
+        html: htmlContent,
+      });
+
+      if (sendResult.success) {
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
-      } catch (err: any) {
+      } else {
         deliveryStatus = 'Failed';
-        errorMessage = `Nodemailer SMTP failed: ${err.message}`;
+        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP failed';
       }
     } else {
       const liveClient = this.getGmailClient();
@@ -1100,20 +1207,21 @@ If you have any questions, please contact your administrator.
       deliveryStatus = 'Sent';
       sentAt = new Date().toISOString();
     } else if (nodemailerTransporter && recipient) {
-      try {
-        await nodemailerTransporter.transporter.sendMail({
-          from: `"TC Tracker Team" <${nodemailerTransporter.from}>`,
-          to: recipient,
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
+      const sendResult = await this.sendNodemailerMail({
+        fromName: 'TC Tracker Team',
+        fromEmail: nodemailerTransporter.from,
+        to: recipient,
+        subject: emailSubject,
+        text: textBody,
+        html: htmlBody,
+      });
+
+      if (sendResult.success) {
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
-      } catch (err: any) {
+      } else {
         deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Nodemailer SMTP transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
       }
     } else if (gmailClient && recipient) {
       try {
@@ -1305,20 +1413,21 @@ IMPORTANT:
       deliveryStatus = 'Sent';
       sentAt = new Date().toISOString();
     } else if (nodemailerTransporter && recipient) {
-      try {
-        await nodemailerTransporter.transporter.sendMail({
-          from: `"TC Tracker Security" <${nodemailerTransporter.from}>`,
-          to: recipient,
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
+      const sendResult = await this.sendNodemailerMail({
+        fromName: 'TC Tracker Security',
+        fromEmail: nodemailerTransporter.from,
+        to: recipient,
+        subject: emailSubject,
+        text: textBody,
+        html: htmlBody,
+      });
+
+      if (sendResult.success) {
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
-      } catch (err: any) {
+      } else {
         deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Nodemailer SMTP transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
       }
     } else if (gmailClient && recipient) {
       try {
@@ -1392,6 +1501,87 @@ IMPORTANT:
       }
     }
     return [...this.mockEmailLogs];
+  }
+
+  /**
+   * Live diagnostic verification of the email connection for Admin inspection on deployment.
+   */
+  public async verifyConnection(): Promise<{
+    configured: boolean;
+    gmailUser?: string;
+    hasAppPassword: boolean;
+    authMethod: 'Gmail App Password (SMTP)' | 'Custom SMTP' | 'Gmail OAuth2' | 'None';
+    verified: boolean;
+    portUsed?: number;
+    error?: string;
+    troubleshooting?: string;
+  }> {
+    this.reloadEnv(true);
+    const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
+    const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
+    const hasAppPassword = Boolean(rawPass && rawPass.trim());
+    const isConfigured = this.isEmailConfigured();
+
+    if (!isConfigured) {
+      return {
+        configured: false,
+        gmailUser: gmailUser ? `${gmailUser.substring(0, 2)}***@${gmailUser.split('@')[1] || ''}` : undefined,
+        hasAppPassword,
+        authMethod: 'None',
+        verified: false,
+        error: 'Email service credentials not configured.',
+        troubleshooting: 'Please set GMAIL_USER and GMAIL_APP_PASSWORD in your hosting environment variables (e.g. Render Dashboard -> Environment).',
+      };
+    }
+
+    const authMethod = (gmailUser && hasAppPassword)
+      ? 'Gmail App Password (SMTP)'
+      : process.env.SMTP_HOST
+      ? 'Custom SMTP'
+      : 'Gmail OAuth2';
+
+    const maskedUser = gmailUser
+      ? `${gmailUser.substring(0, 2)}***@${gmailUser.split('@')[1] || ''}`
+      : undefined;
+
+    // Test primary port first, then alternative port
+    const primaryPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465;
+    const fallbackPort = primaryPort === 465 ? 587 : 465;
+    const portsToTry = [primaryPort, fallbackPort];
+
+    let lastError = '';
+    for (const port of portsToTry) {
+      const transporterObj = this.getNodemailerTransporter(port);
+      if (!transporterObj) continue;
+
+      try {
+        await transporterObj.transporter.verify();
+        return {
+          configured: true,
+          gmailUser: maskedUser,
+          hasAppPassword,
+          authMethod,
+          verified: true,
+          portUsed: port,
+        };
+      } catch (err: any) {
+        lastError = this.formatSmtpError(err);
+      }
+    }
+
+    return {
+      configured: true,
+      gmailUser: maskedUser,
+      hasAppPassword,
+      authMethod,
+      verified: false,
+      error: lastError,
+      troubleshooting: lastError.includes('535')
+        ? 'Google rejected your App Password. Confirm that 2-Step Verification is active on that Google account, generate a new 16-character App Password at https://myaccount.google.com/apppasswords, and check Google Security Alerts to approve sign-in from your cloud deployment.'
+        : lastError.includes('Timed Out')
+        ? 'Connection to Google SMTP timed out on ports 465 and 587. Check if your hosting provider allows outbound SMTP traffic.'
+        : 'Verify your email settings and network connectivity.',
+    };
   }
 }
 

@@ -1029,6 +1029,20 @@ export async function updateUser(
   return res;
 }
 
+export async function deleteUser(
+  userId: string,
+  permanent = false
+): Promise<{ success: boolean; message: string; mode: 'deactivated' | 'deleted' }> {
+  const url = `/api/users/${encodeURIComponent(userId)}${permanent ? '?permanent=true' : ''}`;
+  const res = await apiFetch<{ success: boolean; message: string; mode: 'deactivated' | 'deleted' }>(url, {
+    method: 'DELETE',
+  });
+  clearClientCache('users:');
+  clearClientCache('reports:');
+  clearClientCache('dashboard:');
+  return res;
+}
+
 export interface EmailLogItem {
   EmailLogID: string;
   RelatedLeaveRequestID: string;
@@ -1039,8 +1053,23 @@ export interface EmailLogItem {
   SentAt: string;
 }
 
+export interface EmailConnectionStatus {
+  configured: boolean;
+  gmailUser?: string;
+  hasAppPassword: boolean;
+  authMethod: string;
+  verified: boolean;
+  portUsed?: number;
+  error?: string;
+  troubleshooting?: string;
+}
+
 export async function fetchEmailLogs(): Promise<{ success: boolean; data: EmailLogItem[] }> {
   return apiFetch('/api/dashboard/email-logs');
+}
+
+export async function testEmailConnection(): Promise<{ success: boolean; data: EmailConnectionStatus }> {
+  return apiFetch('/api/dashboard/email-test', { method: 'POST' });
 }
 
 export interface MonthlyAttendanceReportData {

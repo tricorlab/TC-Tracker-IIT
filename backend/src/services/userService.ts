@@ -598,6 +598,159 @@ export class UserService {
   }
 
   /**
+   * Delete or deactivate a user account (Admin only).
+   *
+   * Strategies supported:
+   * - Soft Delete (default): Sets IsActive = 'FALSE'. Preserves historical attendance,
+   *   leave logs, and audit trails for institutional compliance, while immediately
+   *   blocking login access.
+   * - Hard Delete (permanent = true): Physically deletes the user row from the Users worksheet.
+   *
+   * Safeguards enforced:
+   * 1. Administrators cannot delete or deactivate their own account (403).
+   * 2. Cannot delete or deactivate the last active Administrator (400).
+   * 3. Comprehensive audit logging in ActivityLogs.
+   */
+  public async deleteUser(
+    modifierUser: AuthenticatedUserContext,
+    targetUserId: string,
+    options?: { permanent?: boolean }
+  ): Promise<{ success: boolean; message: string; mode: 'deactivated' | 'deleted' }> {
+    if (modifierUser.role !== 'Admin') {
+      throw new UserVerificationError('Only Administrators can delete or deactivate user accounts.', 403);
+    }
+
+    const allUsers = await this.getAllUsers();
+    const targetUser = allUsers.find(
+      (u) => (u.UserID || '').trim() === targetUserId.trim()
+    );
+
+    if (!targetUser) {
+      throw new UserVerificationError('User not found.', 404);
+    }
+
+    // Safeguard 1: Self-deletion / deactivation prevention
+    if (modifierUser.userId === targetUser.UserID.trim()) {
+      throw new UserVerificationError('Administrators cannot delete or deactivate their own account.', 403);
+    }
+
+    // Safeguard 2: Last active Admin protection
+    const isCurrentlyActiveAdmin =
+      targetUser.Role === 'Admin' && this.parseIsActive(targetUser.IsActive);
+
+    if (isCurrentlyActiveAdmin) {
+      const activeAdmins = allUsers.filter(
+        (u) => u.Role === 'Admin' && this.parseIsActive(u.IsActive)
+      );
+      if (activeAdmins.length <= 1) {
+        throw new UserVerificationError(
+          'Cannot delete or deactivate the last active Administrator.',
+          400
+        );
+      }
+    }
+
+    const isPermanent = Boolean(options?.permanent);
+
+    if (isPermanent) {
+      // Hard Delete: Physically remove row from Google Sheets Users worksheet
+      if (googleSheetsService.isLiveApiEnabled()) {
+        const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+          SHEET_NAMES.USERS,
+          'A',
+          targetUserId
+        );
+        const userIdx = allUsers.findIndex(
+          (u) => u.UserID.trim() === targetUserId.trim()
+        );
+        const sheetRowIndex = actualRow !== -1 ? actualRow : (userIdx !== -1 ? userIdx + 2 : -1);
+
+        if (sheetRowIndex !== -1) {
+          try {
+            await googleSheetsService.deleteSheetRow(SHEET_NAMES.USERS, sheetRowIndex);
+          } catch (err: any) {
+            console.error('[UserService Error] Failed to delete user from Google Sheets:', err.message);
+            throw new UserVerificationError(`Database error deleting user: ${err.message}`, 503);
+          }
+        }
+      }
+
+      // Evict from in-memory caches
+      this.cache.delete(targetUserId.trim());
+      this.cachedRecords = this.cachedRecords.filter(
+        (u) => u.UserID.trim() !== targetUserId.trim()
+      );
+      this.lastAllUsersFetch = 0;
+
+      await activityLogService.logActivity({
+        performedBy: modifierUser.userId,
+        action: 'USER_DELETED',
+        entityType: 'User',
+        entityID: targetUser.UserID,
+        previousValue: JSON.stringify(sanitizeUserForLog(targetUser)),
+        reason: `Admin ${modifierUser.fullName} permanently deleted user ${targetUser.FullName} (${targetUser.Email})`,
+      });
+
+      return {
+        success: true,
+        message: `User '${targetUser.FullName}' was permanently deleted from the database.`,
+        mode: 'deleted',
+      };
+    } else {
+      // Soft Delete (Deactivation): Sets IsActive = 'FALSE'
+      const updatedUser: UserRow = {
+        ...targetUser,
+        IsActive: 'FALSE',
+        UpdatedAt: new Date().toISOString(),
+      };
+
+      if (googleSheetsService.isLiveApiEnabled()) {
+        const actualRow = await googleSheetsService.findRowIndexByColumnValue(
+          SHEET_NAMES.USERS,
+          'A',
+          targetUserId
+        );
+        const userIdx = allUsers.findIndex(
+          (u) => u.UserID.trim() === targetUserId.trim()
+        );
+        const sheetRowIndex = actualRow !== -1 ? actualRow : (userIdx !== -1 ? userIdx + 2 : -1);
+
+        if (sheetRowIndex !== -1) {
+          try {
+            await googleSheetsService.updateSheetRange(
+              `${SHEET_NAMES.USERS}!F${sheetRowIndex}:H${sheetRowIndex}`,
+              [['FALSE', targetUser.CreatedAt, updatedUser.UpdatedAt]]
+            );
+          } catch (err: any) {
+            console.error('[UserService Error] Failed to deactivate user in Google Sheets:', err.message);
+            throw new UserVerificationError(`Database error deactivating user: ${err.message}`, 503);
+          }
+        }
+      }
+
+      this.cache.set(targetUserId.trim(), { user: updatedUser, cachedAt: Date.now() });
+      this.lastAllUsersFetch = 0;
+      this.cachedRecords = [];
+
+      await activityLogService.logActivity({
+        performedBy: modifierUser.userId,
+        action: 'USER_DEACTIVATED',
+        entityType: 'User',
+        entityID: targetUser.UserID,
+        previousValue: JSON.stringify(sanitizeUserForLog(targetUser)),
+        newValue: JSON.stringify(sanitizeUserForLog(updatedUser)),
+        reason: `Admin ${modifierUser.fullName} deactivated user ${targetUser.FullName} (${targetUser.Email})`,
+      });
+
+      return {
+        success: true,
+        message: `User '${targetUser.FullName}' was deactivated successfully. Historical records remain preserved.`,
+        mode: 'deactivated',
+      };
+    }
+  }
+
+  /**
    * Persist in-memory and Google Sheets row updates for an existing user.
    */
   public async persistUserRow(updatedUser: UserRow): Promise<void> {

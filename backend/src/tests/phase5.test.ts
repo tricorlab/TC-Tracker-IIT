@@ -354,6 +354,106 @@ describe('--- [PHASE 5 TEST SUITE] User Management, Email Audit & Reports ---', 
   });
 
   /* ======================================================================= */
+  /* 2.1. User Deletion & Deactivation Strategies and Safeguards             */
+  /* ======================================================================= */
+  describe('2.1. User Deletion & Deactivation Strategies and Safeguards', () => {
+    it('should reject non-admin users from deleting or deactivating accounts (403 Forbidden)', async () => {
+      await assert.rejects(
+        async () => {
+          await userService.deleteUser(staffContext, 'USR-STAFF-02');
+        },
+        {
+          name: 'UserVerificationError',
+          message: 'Only Administrators can delete or deactivate user accounts.',
+          statusCode: 403,
+        }
+      );
+    });
+
+    it('Safeguard 1: Administrator cannot delete or deactivate their own account (403 Forbidden)', async () => {
+      await assert.rejects(
+        async () => {
+          await userService.deleteUser(adminContext, 'USR-ADMIN-01');
+        },
+        {
+          name: 'UserVerificationError',
+          message: 'Administrators cannot delete or deactivate their own account.',
+          statusCode: 403,
+        }
+      );
+    });
+
+    it('Safeguard 2: Last active Administrator cannot be deleted or deactivated (400 Bad Request)', async () => {
+      const dummyAdmin: AuthenticatedUserContext = {
+        userId: 'USR-TEMP-ADMIN',
+        fullName: 'Temp Admin',
+        email: 'temp.admin@example.com',
+        role: 'Admin',
+        isActive: true,
+      };
+
+      await assert.rejects(
+        async () => {
+          await userService.deleteUser(dummyAdmin, 'USR-ADMIN-01', { permanent: true });
+        },
+        {
+          name: 'UserVerificationError',
+          message: 'Cannot delete or deactivate the last active Administrator.',
+          statusCode: 400,
+        }
+      );
+    });
+
+    it('should soft-delete (deactivate) an employee preserving records and recording USER_DEACTIVATED', async () => {
+      const result = await userService.deleteUser(adminContext, 'USR-STAFF-01');
+      assert.equal(result.success, true);
+      assert.equal(result.mode, 'deactivated');
+
+      // Verify user is marked inactive
+      const all = await userService.getAllUsers();
+      const target = all.find((u) => u.UserID === 'USR-STAFF-01');
+      assert.ok(target);
+      assert.equal(userService.parseIsActive(target.IsActive), false);
+
+      // Verify audit log
+      const logs = await activityLogService.getAllLogs();
+      const deactLogs = logs.filter((l) => l.Action === 'USER_DEACTIVATED');
+      assert.equal(deactLogs.length, 1);
+      assert.equal(deactLogs[0].EntityID, 'USR-STAFF-01');
+    });
+
+    it('should permanently delete an employee row when permanent: true is specified and record USER_DELETED', async () => {
+      const result = await userService.deleteUser(adminContext, 'USR-STAFF-02', { permanent: true });
+      assert.equal(result.success, true);
+      assert.equal(result.mode, 'deleted');
+
+      // Verify user is completely removed from list
+      const all = await userService.getAllUsers();
+      const target = all.find((u) => u.UserID === 'USR-STAFF-02');
+      assert.equal(target, undefined);
+
+      // Verify audit log
+      const logs = await activityLogService.getAllLogs();
+      const delLogs = logs.filter((l) => l.Action === 'USER_DELETED');
+      assert.equal(delLogs.length, 1);
+      assert.equal(delLogs[0].EntityID, 'USR-STAFF-02');
+    });
+
+    it('should return 404 if the target user does not exist', async () => {
+      await assert.rejects(
+        async () => {
+          await userService.deleteUser(adminContext, 'NON-EXISTENT-ID');
+        },
+        {
+          name: 'UserVerificationError',
+          message: 'User not found.',
+          statusCode: 404,
+        }
+      );
+    });
+  });
+
+  /* ======================================================================= */
   /* 3. Email Notification Audit Inspector                                   */
   /* ======================================================================= */
   describe('3. Email Notification Audit Inspector', () => {

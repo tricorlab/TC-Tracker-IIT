@@ -88,6 +88,29 @@ export class UserController {
       res.status(status).json({ success: false, message: err.message });
     }
   }
+
+  /**
+   * Delete or deactivate a user (Admin only).
+   * - permanent=true (query or body) executes permanent hard delete.
+   * - Default executes soft delete (deactivation).
+   */
+  public async deleteUser(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ success: false, message: 'Unauthorized session.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const permanent = req.query.permanent === 'true' || req.body?.permanent === true;
+
+      const result = await userService.deleteUser(req.user, id, { permanent });
+      res.json(result);
+    } catch (err: any) {
+      const status = err instanceof UserVerificationError ? err.statusCode : 400;
+      res.status(status).json({ success: false, message: err.message });
+    }
+  }
 }
 
 export const userController = new UserController();

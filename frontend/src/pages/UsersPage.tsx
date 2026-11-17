@@ -4,6 +4,7 @@ import {
   fetchUsers,
   createUser,
   updateUser,
+  deleteUser,
   adminResetPasswordApi,
 } from '../services/api';
 import type { UserItem, UserRole } from '../services/api';
@@ -21,6 +22,8 @@ import {
   X,
   ShieldAlert,
   KeyRound,
+  Trash2,
+  UserX,
 } from 'lucide-react';
 
 const TODAY_DATE_STR = new Date().toISOString().split('T')[0];
@@ -60,6 +63,12 @@ export const UsersPage: React.FC = () => {
   const [editIsActive, setEditIsActive] = useState<boolean>(true);
   const [submittingEdit, setSubmittingEdit] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete / Remove User Modal State (Admin only)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [userToDelete, setUserToDelete] = useState<UserItem | null>(null);
+  const [submittingDelete, setSubmittingDelete] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isUserActive = (isActive: boolean | string | number): boolean => {
     if (typeof isActive === 'boolean') return isActive;
@@ -210,6 +219,52 @@ export const UsersPage: React.FC = () => {
       toast.success(res.message || 'Password reset and emailed successfully.', 'Password Reset');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to reset password.', 'Reset Failed');
+    }
+  };
+
+  const openDeleteModal = (target: UserItem) => {
+    setUserToDelete(target);
+    setDeleteError(null);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteUser = async (permanent: boolean) => {
+    if (!userToDelete) return;
+    setSubmittingDelete(true);
+    setDeleteError(null);
+
+    try {
+      const res = await deleteUser(userToDelete.UserID, permanent);
+      toast.success(res.message, permanent ? 'User Deleted' : 'User Deactivated');
+      setIsDeleteModalOpen(false);
+      setUserToDelete(null);
+      await loadUsers();
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to remove user.';
+      setDeleteError(msg);
+      toast.error(msg, 'Action Error');
+    } finally {
+      setSubmittingDelete(false);
+    }
+  };
+
+  const handleReactivateUser = async () => {
+    if (!userToDelete) return;
+    setSubmittingDelete(true);
+    setDeleteError(null);
+
+    try {
+      await updateUser(userToDelete.UserID, { isActive: true });
+      toast.success(`User '${userToDelete.FullName}' has been reactivated.`, 'User Reactivated');
+      setIsDeleteModalOpen(false);
+      setUserToDelete(null);
+      await loadUsers();
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to reactivate user.';
+      setDeleteError(msg);
+      toast.error(msg, 'Reactivation Error');
+    } finally {
+      setSubmittingDelete(false);
     }
   };
 
@@ -395,6 +450,17 @@ export const UsersPage: React.FC = () => {
                             <Edit2 className="w-3.5 h-3.5" />
                             <span>Edit</span>
                           </button>
+                          {!isSelfAccount(u.UserID) && (
+                            <button
+                              type="button"
+                              onClick={() => openDeleteModal(u)}
+                              title="Delete or deactivate user"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200/60 rounded-lg transition cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Remove</span>
+                            </button>
+                          )}
                         </td>
                       )}
                     </tr>
@@ -660,6 +726,130 @@ export const UsersPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Remove / Delete User Modal (Admin Only) */}
+      {isDeleteModalOpen && userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+                <h3 className="font-bold text-slate-900 text-base">Remove / Delete User</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition cursor-pointer p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {deleteError && (
+              <div className="mt-4 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2 text-xs text-rose-800">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="my-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Employee Name:</span>
+                <span className="font-bold text-slate-900">{userToDelete.FullName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Email:</span>
+                <span className="font-mono text-slate-800">{userToDelete.Email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Role:</span>
+                <span className="font-semibold">{userToDelete.Role}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Status:</span>
+                <span>
+                  {isUserActive(userToDelete.IsActive) ? (
+                    <span className="text-emerald-700 font-semibold">Active</span>
+                  ) : (
+                    <span className="text-slate-500 font-semibold">Inactive / Deactivated</span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* Option 1: Soft Delete (Deactivate) */}
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5 text-amber-900">
+                    <UserX className="w-4 h-4 text-amber-700" />
+                    Strategy 1: Deactivate Account (Soft Delete)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200/80 text-amber-900">
+                    Recommended
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-900/80 leading-relaxed">
+                  Disables login access and removes employee from active attendance rosters. Past punches, leave balances, and reports are <strong>preserved for audits and compliance</strong>.
+                </p>
+                {isUserActive(userToDelete.IsActive) ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteUser(false)}
+                    disabled={submittingDelete}
+                    className="w-full mt-1 py-1.5 px-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition cursor-pointer"
+                  >
+                    {submittingDelete ? 'Processing...' : 'Deactivate Employee'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleReactivateUser}
+                    disabled={submittingDelete}
+                    className="w-full mt-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition cursor-pointer"
+                  >
+                    {submittingDelete ? 'Processing...' : 'Reactivate Employee'}
+                  </button>
+                )}
+              </div>
+
+              {/* Option 2: Hard Delete (Permanent) */}
+              <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-xl text-xs text-rose-950 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold flex items-center gap-1.5 text-rose-900">
+                    <Trash2 className="w-4 h-4 text-rose-700" />
+                    Strategy 2: Permanently Delete (Hard Delete)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-200/80 text-rose-900">
+                    Permanent
+                  </span>
+                </div>
+                <p className="text-[11px] text-rose-900/80 leading-relaxed">
+                  Physically wipes the employee row from Google Sheets. Ideal for mistakenly created users or test accounts. Cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteUser(true)}
+                  disabled={submittingDelete}
+                  className="w-full mt-1 py-1.5 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition cursor-pointer"
+                >
+                  {submittingDelete ? 'Processing...' : 'Permanently Delete User'}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-3.5 py-1.5 border border-slate-200 text-slate-700 rounded-lg text-xs hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
