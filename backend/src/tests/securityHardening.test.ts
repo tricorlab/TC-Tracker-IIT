@@ -13,6 +13,11 @@ describe('--- [SECURITY HARDENING SUITE] Defense Verification ---', () => {
       assert.strictEqual(isAllowedOrigin('http://127.0.0.1:3000'), true);
     });
 
+    it('should allow built-in project deployment domains on vercel.app', () => {
+      assert.strictEqual(isAllowedOrigin('https://tctracker-iitm.vercel.app'), true);
+      assert.strictEqual(isAllowedOrigin('https://tc-tracker-iitm.vercel.app'), true);
+    });
+
     it('should reject arbitrary untrusted multi-tenant domains on vercel.app', () => {
       assert.strictEqual(isAllowedOrigin('https://attacker-project.vercel.app'), false);
       assert.strictEqual(isAllowedOrigin('https://malicious.vercel.app'), false);

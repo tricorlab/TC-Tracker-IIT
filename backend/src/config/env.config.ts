@@ -85,13 +85,17 @@ const passwordPepper = rawPasswordPepper || sessionSecret;
 // Cookie SameSite and Secure resolution:
 // In production cross-site deployment (e.g. Vercel frontend + Render backend), SameSite=None + Secure=true is required.
 // In local development, SameSite=Lax + Secure=false is standard for localhost HTTP.
+const isRenderCloud = process.env.RENDER === 'true';
 const sameSiteConfig = (process.env.COOKIE_SAME_SITE as 'lax' | 'none' | 'strict') ||
-  (isProduction ? 'none' : 'lax');
-const secureConfig = isProduction || process.env.COOKIE_SECURE === 'true';
+  (isProduction || isRenderCloud ? 'none' : 'lax');
+const secureConfig = isProduction || process.env.COOKIE_SECURE === 'true' || isRenderCloud;
 
 export const config: EnvConfig = {
   port: parseInt(process.env.PORT || '5000', 10),
-  frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/+$/, ''),
+  frontendUrl: (
+    process.env.FRONTEND_URL ||
+    (isRenderCloud ? 'https://tctracker-iitm.vercel.app' : 'http://localhost:5173')
+  ).replace(/\/+$/, ''),
   sessionSecret,
   passwordPepper,
   isProduction,

@@ -38,7 +38,16 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
     }
   }
 
-  // 2. Local development origins (localhost, 127.0.0.1 on any port)
+  // 2. Built-in trusted project domains & project-scoped Vercel deployment patterns
+  if (
+    normalized === 'https://tctracker-iitm.vercel.app' ||
+    normalized === 'https://tc-tracker-iitm.vercel.app' ||
+    /^https:\/\/(tc-?tracker)[a-z0-9-]*\.vercel\.app$/.test(normalized)
+  ) {
+    return true;
+  }
+
+  // 3. Local development origins (localhost, 127.0.0.1 on any port)
   if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(normalized)) return true;
 
   return false;
