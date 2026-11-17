@@ -41,3 +41,12 @@ services:
         sync: false
       - key: ADMIN_GMAIL
         sync: false
+      # Solution 1: Cloud-compatible HTTPS Email API (Recommended for Render to bypass SMTP port blocking)
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        sync: false

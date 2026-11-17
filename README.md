@@ -217,8 +217,19 @@ tc-tracker/
    - Client ID ➔ `GOOGLE_CLIENT_ID` / `VITE_GOOGLE_CLIENT_ID`
    - Client Secret ➔ `GOOGLE_CLIENT_SECRET`
 
-### D. Gmail SMTP App Password
-To send formal leave notifications to the administrator:
+### D. Email Notification Setup
+
+#### Option 1: Resend REST API (Recommended for Cloud Hosting / Render)
+Cloud platforms like Render, AWS EC2, and DigitalOcean block outbound SMTP ports 25, 465, and 587. Resend communicates via HTTPS (Port 443), which is **never blocked by cloud firewalls**.
+1. Sign up for a free account (3,000 free emails/month) at [resend.com](https://resend.com/).
+2. Create an API Key in the Resend dashboard (`re_...`).
+3. Set the following environment variables in your Render Dashboard (or `backend/.env`):
+   - `RESEND_API_KEY=re_your_api_key_here`
+   - `EMAIL_FROM="TC Tracker <onboarding@resend.dev>"` (or your verified domain address)
+   - `ADMIN_GMAIL=admin@institute.org`
+
+#### Option 2: Gmail SMTP App Password (Local Development / Unblocked Hosts)
+To send notifications via Gmail SMTP:
 1. Enable **2-Step Verification** on the sending Google Account: [myaccount.google.com/security](https://myaccount.google.com/security).
 2. Generate an **App Password**: [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
    - App: *Mail* | Device: *Server / TC Tracker*.
@@ -247,7 +258,9 @@ To send formal leave notifications to the administrator:
 | `GOOGLE_PRIVATE_KEY` | Yes | Service Account private key with newline escapes | `"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"` |
 | `GOOGLE_SPREADSHEET_ID` | Yes | Google Sheets Database ID | `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms` |
 | `GOOGLE_DRIVE_BACKUP_FOLDER_ID` | Optional | Shared Drive folder ID for semi-annual backups | `19V-P3eI2jY-xxxxxx` |
-| `GMAIL_USER` | Optional | Sender Gmail address for leave notifications | `sender@gmail.com` |
+| `RESEND_API_KEY` | Optional | Resend API key for cloud HTTPS email dispatch | `re_123456789_abcdefg` |
+| `EMAIL_FROM` | Optional | Sender name and address for transactional emails | `"TC Tracker <onboarding@resend.dev>"` |
+| `GMAIL_USER` | Optional | Sender Gmail address for SMTP notifications | `sender@gmail.com` |
 | `GMAIL_APP_PASSWORD` | Optional | 16-character Gmail App Password | `abcd efgh ijkl mnop` |
 | `ADMIN_GMAIL` | Optional | Recipient Admin email for leave alerts | `admin@institute.org` |
 

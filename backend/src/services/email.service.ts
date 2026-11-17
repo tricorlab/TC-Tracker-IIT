@@ -143,13 +143,21 @@ export class EmailService {
   }
 
   /**
-   * Check if live email credentials (Gmail App Password, SMTP, or Gmail API OAuth2) are configured.
+   * Check if live email credentials (Resend API, Brevo API, Gmail App Password, SMTP, or Gmail API OAuth2) are configured.
    */
   public isEmailConfigured(): boolean {
     if (this.customDispatcher) {
       return true;
     }
     this.reloadEnv();
+
+    // 0. Check HTTP REST Email APIs (Port 443 - HTTPS, firewall-proof on cloud platforms like Render)
+    if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
+      return true;
+    }
+    if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim()) {
+      return true;
+    }
 
     // 1. Check Gmail SMTP / App Password
     const gmailUser = this.getResolvedGmailUser();
@@ -326,6 +334,247 @@ export class EmailService {
 
       return { success: false, errorMessage: this.formatSmtpError(err) };
     }
+  }
+
+  /**
+   * Helper to send email via Resend REST API (HTTPS port 443).
+   * Bypasses cloud hosting SMTP firewall restrictions on Render, AWS, and DigitalOcean.
+   */
+  public async sendResendMail(options: {
+    fromName?: string;
+    fromEmail?: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    replyTo?: string;
+  }): Promise<{ success: boolean; errorMessage?: string }> {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    if (!apiKey) {
+      return { success: false, errorMessage: 'RESEND_API_KEY is not configured in environment.' };
+    }
+
+    const defaultFrom = 'TC Tracker <onboarding@resend.dev>';
+    const configuredFrom =
+      process.env.RESEND_FROM ||
+      process.env.EMAIL_FROM ||
+      (options.fromName && process.env.GMAIL_USER ? `"${options.fromName}" <${process.env.GMAIL_USER}>` : undefined);
+    const from = configuredFrom || defaultFrom;
+
+    try {
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: [options.to],
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+          ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as any;
+
+      if (!response.ok) {
+        const errorMsg = data?.message || data?.error || `HTTP ${response.status} ${response.statusText}`;
+        return {
+          success: false,
+          errorMessage: `Resend API Error (${response.status}): ${errorMsg}`,
+        };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorMessage: `Resend API Network Error: ${err?.message || 'Failed to reach api.resend.com'}`,
+      };
+    }
+  }
+
+  /**
+   * Helper to send email via Brevo (Sendinblue) REST API (HTTPS port 443).
+   */
+  public async sendBrevoMail(options: {
+    fromName?: string;
+    fromEmail?: string;
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    replyTo?: string;
+  }): Promise<{ success: boolean; errorMessage?: string }> {
+    const apiKey = process.env.BREVO_API_KEY?.trim();
+    if (!apiKey) {
+      return { success: false, errorMessage: 'BREVO_API_KEY is not configured in environment.' };
+    }
+
+    const senderEmail =
+      process.env.BREVO_FROM ||
+      process.env.EMAIL_FROM ||
+      process.env.GMAIL_USER ||
+      options.fromEmail ||
+      'notifications@tc-tracker.local';
+    const senderName = options.fromName || 'TC Tracker';
+
+    try {
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: { name: senderName, email: senderEmail },
+          to: [{ email: options.to }],
+          subject: options.subject,
+          htmlContent: options.html,
+          textContent: options.text,
+          ...(options.replyTo ? { replyTo: { email: options.replyTo } } : {}),
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as any;
+
+      if (!response.ok) {
+        const errorMsg = data?.message || `HTTP ${response.status} ${response.statusText}`;
+        return {
+          success: false,
+          errorMessage: `Brevo API Error (${response.status}): ${errorMsg}`,
+        };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorMessage: `Brevo API Network Error: ${err?.message || 'Failed to reach api.brevo.com'}`,
+      };
+    }
+  }
+
+  /**
+   * Determine the active email dispatch mechanism.
+   * Priority:
+   * 1. Explicit EMAIL_PROVIDER ('resend' | 'brevo' | 'gmail_api' | 'smtp')
+   * 2. Resend REST API (HTTPS port 443 - zero firewall blocking on cloud hosts)
+   * 3. Brevo REST API (HTTPS port 443)
+   * 4. Gmail API OAuth2 (HTTPS port 443)
+   * 5. Nodemailer SMTP (Gmail App Password or Custom SMTP)
+   */
+  public getActiveProvider(): 'resend' | 'brevo' | 'gmail_api' | 'smtp' | null {
+    const explicit = process.env.EMAIL_PROVIDER?.toLowerCase().trim();
+    if (explicit === 'resend' && process.env.RESEND_API_KEY) return 'resend';
+    if (explicit === 'brevo' && process.env.BREVO_API_KEY) return 'brevo';
+    if (explicit === 'gmail_api' && this.getGmailClient()) return 'gmail_api';
+    if (explicit === 'smtp' && this.getNodemailerTransporter()) return 'smtp';
+
+    if (process.env.RESEND_API_KEY?.trim()) return 'resend';
+    if (process.env.BREVO_API_KEY?.trim()) return 'brevo';
+    if (this.getGmailClient()) return 'gmail_api';
+    if (this.getNodemailerTransporter()) return 'smtp';
+
+    return null;
+  }
+
+  /**
+   * Unified dispatcher executing the active email transport.
+   * Handles custom testing dispatchers, mock test environments, Resend, Brevo, Gmail API, and SMTP.
+   */
+  public async sendDirectEmail(options: {
+    to: string;
+    subject: string;
+    text: string;
+    html: string;
+    fromName?: string;
+    fromEmail?: string;
+    replyTo?: string;
+  }): Promise<{ success: boolean; errorMessage?: string }> {
+    if (this.customDispatcher) {
+      try {
+        await this.customDispatcher({
+          to: options.to,
+          from: options.fromEmail || 'notifications@tc-tracker.local',
+          subject: options.subject,
+          text: options.text,
+          html: options.html,
+        });
+        return { success: true };
+      } catch (err: any) {
+        return { success: false, errorMessage: err?.message || 'Custom dispatcher transmission failure' };
+      }
+    }
+
+    if (process.env.NODE_ENV === 'test') {
+      return { success: true };
+    }
+
+    const provider = this.getActiveProvider();
+    if (!provider) {
+      return {
+        success: false,
+        errorMessage: 'Email service credentials not configured. Please set RESEND_API_KEY (or GMAIL_USER and GMAIL_APP_PASSWORD) in environment to send live emails.',
+      };
+    }
+
+    if (provider === 'resend') {
+      return this.sendResendMail(options);
+    }
+
+    if (provider === 'brevo') {
+      return this.sendBrevoMail(options);
+    }
+
+    if (provider === 'gmail_api') {
+      const gmailClient = this.getGmailClient();
+      if (!gmailClient) {
+        return { success: false, errorMessage: 'Gmail OAuth2 client could not be initialized.' };
+      }
+      try {
+        const raw = this.buildRawMimeMessage({
+          from: gmailClient.from,
+          to: options.to,
+          subject: options.subject,
+          textBody: options.text,
+          htmlBody: options.html,
+        });
+        await gmailClient.gmail.users.messages.send({
+          userId: 'me',
+          requestBody: { raw },
+        });
+        return { success: true };
+      } catch (err: any) {
+        const rawMsg = err?.message || 'Gmail API transmission failure';
+        return {
+          success: false,
+          errorMessage: rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]'),
+        };
+      }
+    }
+
+    if (provider === 'smtp') {
+      const transporterObj = this.getNodemailerTransporter();
+      if (!transporterObj) {
+        return { success: false, errorMessage: 'Nodemailer transporter could not be initialized.' };
+      }
+      return this.sendNodemailerMail({
+        fromName: options.fromName || 'TC Tracker',
+        fromEmail: transporterObj.from,
+        to: options.to,
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+        replyTo: options.replyTo,
+      });
+    }
+
+    return { success: false, errorMessage: 'No email delivery provider available.' };
   }
 
   /**
@@ -627,13 +876,9 @@ Office of Administration
     const textBody = this.generatePlainTextEmail(payload);
     const htmlBody = this.generateHtmlEmail(payload);
 
-    const isTest = process.env.NODE_ENV === 'test';
-    const nodemailerTransporter = !this.customDispatcher && !isTest && isConfigured ? this.getNodemailerTransporter() : null;
-    const gmailClient = !this.customDispatcher && !nodemailerTransporter && !isTest && isConfigured ? this.getGmailClient() : null;
-
     const fromAddress =
-      nodemailerTransporter?.from ||
-      gmailClient?.from ||
+      process.env.RESEND_FROM ||
+      process.env.EMAIL_FROM ||
       process.env.GMAIL_USER ||
       'notifications@tc-tracker.local';
 
@@ -645,70 +890,22 @@ Office of Administration
       let errorMessage = '';
       let sentAt = '';
 
-      if (this.customDispatcher) {
-        try {
-          await this.customDispatcher({
-            to: recipient.email,
-            from: fromAddress,
-            subject: emailSubject,
-            text: textBody,
-            html: htmlBody,
-          });
-          deliveryStatus = 'Sent';
-          sentAt = new Date().toISOString();
-        } catch (err: any) {
-          deliveryStatus = 'Failed';
-          errorMessage = err?.message || 'Custom dispatcher transmission failure';
-        }
-      } else if (isTest) {
-        // Safe mock delivery for unit test environments
+      const sendResult = await this.sendDirectEmail({
+        fromName: 'TC Tracker Leave Management',
+        fromEmail: fromAddress,
+        to: recipient.email,
+        replyTo: payload.staffEmail ? `"${payload.staffName}" <${payload.staffEmail}>` : undefined,
+        subject: emailSubject,
+        text: textBody,
+        html: htmlBody,
+      });
+
+      if (sendResult.success) {
         deliveryStatus = 'Sent';
         sentAt = new Date().toISOString();
-      } else if (nodemailerTransporter) {
-        const sendResult = await this.sendNodemailerMail({
-          fromName: 'TC Tracker Leave Management',
-          fromEmail: nodemailerTransporter.from,
-          to: recipient.email,
-          replyTo: payload.staffEmail ? `"${payload.staffName}" <${payload.staffEmail}>` : undefined,
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
-
-        if (sendResult.success) {
-          deliveryStatus = 'Sent';
-          sentAt = new Date().toISOString();
-        } else {
-          deliveryStatus = 'Failed';
-          errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
-        }
-      } else if (gmailClient) {
-        try {
-          const raw = this.buildRawMimeMessage({
-            from: gmailClient.from,
-            to: recipient.email,
-            subject: emailSubject,
-            textBody,
-            htmlBody,
-          });
-
-          await gmailClient.gmail.users.messages.send({
-            userId: 'me',
-            requestBody: { raw },
-          });
-
-          deliveryStatus = 'Sent';
-          sentAt = new Date().toISOString();
-        } catch (err: any) {
-          deliveryStatus = 'Failed';
-          // Sanitize error message to prevent accidental token/credential logging
-          const rawMsg = err?.message || 'Gmail API transmission failure';
-          errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
-        }
       } else {
-        // Live email service credentials not configured
         deliveryStatus = 'Failed';
-        errorMessage = 'Email service credentials not configured in environment. Please set GMAIL_USER and GMAIL_APP_PASSWORD (or ADMIN_GMAIL) in backend/.env to send live emails to Admins.';
+        errorMessage = sendResult.errorMessage || 'Email transmission failure';
       }
 
       const logRecord: EmailLogRow = {
@@ -856,32 +1053,10 @@ Allocated At:      ${attemptedAt}
     let sentAt = '';
 
     const normalizedRecipient = (payload.staffEmail || '').trim().toLowerCase();
-    const isTest = process.env.NODE_ENV === 'test';
-    const nodemailerTransporter = !this.customDispatcher && !isTest && isConfigured ? this.getNodemailerTransporter() : null;
-    const gmailClient = !this.customDispatcher && !nodemailerTransporter && !isTest && isConfigured ? this.getGmailClient() : null;
 
-    if (this.customDispatcher && normalizedRecipient) {
-      try {
-        await this.customDispatcher({
-          to: normalizedRecipient,
-          from: 'notifications@tc-tracker.local',
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        errorMessage = err?.message || 'Custom dispatcher transmission failure';
-      }
-    } else if (isTest && normalizedRecipient) {
-      deliveryStatus = 'Sent';
-      sentAt = new Date().toISOString();
-    } else if (nodemailerTransporter && normalizedRecipient) {
-      const sendResult = await this.sendNodemailerMail({
+    if (normalizedRecipient) {
+      const sendResult = await this.sendDirectEmail({
         fromName: 'TC Tracker Leave Management',
-        fromEmail: nodemailerTransporter.from,
         to: normalizedRecipient,
         subject: emailSubject,
         text: textBody,
@@ -893,31 +1068,11 @@ Allocated At:      ${attemptedAt}
         sentAt = new Date().toISOString();
       } else {
         deliveryStatus = 'Failed';
-        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
-      }
-    } else if (gmailClient && normalizedRecipient) {
-      try {
-        const raw = this.buildRawMimeMessage({
-          from: gmailClient.from,
-          to: normalizedRecipient,
-          subject: emailSubject,
-          textBody,
-          htmlBody,
-        });
-        await gmailClient.gmail.users.messages.send({
-          userId: 'me',
-          requestBody: { raw },
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Gmail API transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Email transmission failure';
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
+      errorMessage = 'Recipient staff email address was not specified.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1002,79 +1157,20 @@ Allocated At:      ${attemptedAt}
     let errorMessage = '';
     let sentAt = '';
 
-    const isTest = process.env.NODE_ENV === 'test';
-    const nodemailerTransporter = !this.customDispatcher && !isTest ? this.getNodemailerTransporter() : null;
+    const sendResult = await this.sendDirectEmail({
+      fromName: 'TC Tracker Backup Service',
+      to: adminEmail,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
 
-    if (this.customDispatcher) {
-      try {
-        await this.customDispatcher({
-          to: adminEmail,
-          from: 'notifications@tctracker.local',
-          subject,
-          text: textContent,
-          html: htmlContent,
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        errorMessage = `Custom dispatcher failed: ${err.message}`;
-      }
-    } else if (isTest) {
+    if (sendResult.success) {
       deliveryStatus = 'Sent';
       sentAt = new Date().toISOString();
-    } else if (nodemailerTransporter) {
-      const sendResult = await this.sendNodemailerMail({
-        fromName: 'TC Tracker Backup Service',
-        fromEmail: nodemailerTransporter.from,
-        to: adminEmail,
-        subject,
-        text: textContent,
-        html: htmlContent,
-      });
-
-      if (sendResult.success) {
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } else {
-        deliveryStatus = 'Failed';
-        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP failed';
-      }
     } else {
-      const liveClient = this.getGmailClient();
-      if (liveClient) {
-        try {
-          const rawMessage = [
-            `To: ${adminEmail}`,
-            `From: ${liveClient.from}`,
-            `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
-            'MIME-Version: 1.0',
-            'Content-Type: text/html; charset=utf-8',
-            '',
-            htmlContent,
-          ].join('\r\n');
-
-          const encodedMessage = Buffer.from(rawMessage)
-            .toString('base64')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-
-          await liveClient.gmail.users.messages.send({
-            userId: 'me',
-            requestBody: { raw: encodedMessage },
-          });
-
-          deliveryStatus = 'Sent';
-          sentAt = new Date().toISOString();
-        } catch (apiErr: any) {
-          deliveryStatus = 'Failed';
-          errorMessage = `Gmail API transmission failed: ${apiErr.message}`;
-        }
-      } else {
-        deliveryStatus = 'Failed';
-        errorMessage = 'Email service credentials not configured in environment (informational notification recorded)';
-      }
+      deliveryStatus = 'Failed';
+      errorMessage = sendResult.errorMessage || 'Backup notification email failed';
     }
 
     const logRecord: EmailLogRow = {
@@ -1207,36 +1303,13 @@ If you have any questions, please contact your administrator.
 </html>
 `.trim();
 
-    const isTest = process.env.NODE_ENV === 'test';
     let deliveryStatus: 'Pending' | 'Sent' | 'Failed' = 'Pending';
     let errorMessage = '';
     let sentAt = '';
 
-    const nodemailerTransporter = this.getNodemailerTransporter();
-    const gmailClient = this.getGmailClient();
-
-    if (this.customDispatcher && recipient) {
-      try {
-        await this.customDispatcher({
-          to: recipient,
-          from: 'notifications@tc-tracker.local',
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        errorMessage = err?.message || 'Custom dispatcher transmission failure';
-      }
-    } else if (isTest && recipient) {
-      deliveryStatus = 'Sent';
-      sentAt = new Date().toISOString();
-    } else if (nodemailerTransporter && recipient) {
-      const sendResult = await this.sendNodemailerMail({
+    if (recipient) {
+      const sendResult = await this.sendDirectEmail({
         fromName: 'TC Tracker Team',
-        fromEmail: nodemailerTransporter.from,
         to: recipient,
         subject: emailSubject,
         text: textBody,
@@ -1248,31 +1321,11 @@ If you have any questions, please contact your administrator.
         sentAt = new Date().toISOString();
       } else {
         deliveryStatus = 'Failed';
-        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
-      }
-    } else if (gmailClient && recipient) {
-      try {
-        const raw = this.buildRawMimeMessage({
-          from: gmailClient.from,
-          to: recipient,
-          subject: emailSubject,
-          textBody,
-          htmlBody,
-        });
-        await gmailClient.gmail.users.messages.send({
-          userId: 'me',
-          requestBody: { raw },
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Gmail API transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Credentials email transmission failure';
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
+      errorMessage = 'Recipient staff email is required.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1411,36 +1464,13 @@ please contact your administrator immediately.
 </html>
 `.trim();
 
-    const isTest = process.env.NODE_ENV === 'test';
     let deliveryStatus: 'Pending' | 'Sent' | 'Failed' = 'Pending';
     let errorMessage = '';
     let sentAt = '';
 
-    const nodemailerTransporter = this.getNodemailerTransporter();
-    const gmailClient = this.getGmailClient();
-
-    if (this.customDispatcher && recipient) {
-      try {
-        await this.customDispatcher({
-          to: recipient,
-          from: 'notifications@tc-tracker.local',
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        errorMessage = err?.message || 'Custom dispatcher transmission failure';
-      }
-    } else if (isTest && recipient) {
-      deliveryStatus = 'Sent';
-      sentAt = new Date().toISOString();
-    } else if (nodemailerTransporter && recipient) {
-      const sendResult = await this.sendNodemailerMail({
+    if (recipient) {
+      const sendResult = await this.sendDirectEmail({
         fromName: 'TC Tracker Security',
-        fromEmail: nodemailerTransporter.from,
         to: recipient,
         subject: emailSubject,
         text: textBody,
@@ -1452,31 +1482,11 @@ please contact your administrator immediately.
         sentAt = new Date().toISOString();
       } else {
         deliveryStatus = 'Failed';
-        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
-      }
-    } else if (gmailClient && recipient) {
-      try {
-        const raw = this.buildRawMimeMessage({
-          from: gmailClient.from,
-          to: recipient,
-          subject: emailSubject,
-          textBody,
-          htmlBody,
-        });
-        await gmailClient.gmail.users.messages.send({
-          userId: 'me',
-          requestBody: { raw },
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Gmail API transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Password reset email transmission failure';
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER (or ADMIN_GMAIL) and GMAIL_APP_PASSWORD in environment to send live emails.';
+      errorMessage = 'Recipient staff email is required.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1617,36 +1627,13 @@ IMPORTANT:
 </html>
 `.trim();
 
-    const isTest = process.env.NODE_ENV === 'test';
     let deliveryStatus: 'Pending' | 'Sent' | 'Failed' = 'Pending';
     let errorMessage = '';
     let sentAt = '';
 
-    const nodemailerTransporter = this.getNodemailerTransporter();
-    const gmailClient = this.getGmailClient();
-
-    if (this.customDispatcher && recipient) {
-      try {
-        await this.customDispatcher({
-          to: recipient,
-          from: 'notifications@tc-tracker.local',
-          subject: emailSubject,
-          text: textBody,
-          html: htmlBody,
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        errorMessage = err?.message || 'Custom dispatcher transmission failure';
-      }
-    } else if (isTest && recipient) {
-      deliveryStatus = 'Sent';
-      sentAt = new Date().toISOString();
-    } else if (nodemailerTransporter && recipient) {
-      const sendResult = await this.sendNodemailerMail({
+    if (recipient) {
+      const sendResult = await this.sendDirectEmail({
         fromName: 'TC Tracker Security',
-        fromEmail: nodemailerTransporter.from,
         to: recipient,
         subject: emailSubject,
         text: textBody,
@@ -1658,31 +1645,11 @@ IMPORTANT:
         sentAt = new Date().toISOString();
       } else {
         deliveryStatus = 'Failed';
-        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
-      }
-    } else if (gmailClient && recipient) {
-      try {
-        const raw = this.buildRawMimeMessage({
-          from: gmailClient.from,
-          to: recipient,
-          subject: emailSubject,
-          textBody,
-          htmlBody,
-        });
-        await gmailClient.gmail.users.messages.send({
-          userId: 'me',
-          requestBody: { raw },
-        });
-        deliveryStatus = 'Sent';
-        sentAt = new Date().toISOString();
-      } catch (err: any) {
-        deliveryStatus = 'Failed';
-        const rawMsg = err?.message || 'Gmail API transmission failure';
-        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+        errorMessage = sendResult.errorMessage || 'Password reset email transmission failure';
       }
     } else {
       deliveryStatus = 'Failed';
-      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER and GMAIL_APP_PASSWORD in environment to send live emails.';
+      errorMessage = 'Recipient staff email is required.';
     }
 
     const logRecord: EmailLogRow = {
@@ -1741,7 +1708,7 @@ IMPORTANT:
     configured: boolean;
     gmailUser?: string;
     hasAppPassword: boolean;
-    authMethod: 'Gmail App Password (SMTP)' | 'Custom SMTP' | 'Gmail OAuth2' | 'None';
+    authMethod: 'Resend API (HTTPS)' | 'Brevo API (HTTPS)' | 'Gmail App Password (SMTP)' | 'Custom SMTP' | 'Gmail OAuth2' | 'None';
     verified: boolean;
     portUsed?: number;
     error?: string;
@@ -1752,8 +1719,9 @@ IMPORTANT:
     const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
     const hasAppPassword = Boolean(rawPass && rawPass.trim());
     const isConfigured = this.isEmailConfigured();
+    const provider = this.getActiveProvider();
 
-    if (!isConfigured) {
+    if (!isConfigured || !provider) {
       return {
         configured: false,
         gmailUser: gmailUser ? `${gmailUser.substring(0, 2)}***@${gmailUser.split('@')[1] || ''}` : undefined,
@@ -1761,10 +1729,103 @@ IMPORTANT:
         authMethod: 'None',
         verified: false,
         error: 'Email service credentials not configured.',
-        troubleshooting: 'Please set GMAIL_USER and GMAIL_APP_PASSWORD in your hosting environment variables (e.g. Render Dashboard -> Environment).',
+        troubleshooting: 'Please set RESEND_API_KEY (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in your hosting environment variables.',
       };
     }
 
+    if (provider === 'resend') {
+      const apiKey = process.env.RESEND_API_KEY?.trim() || '';
+      try {
+        const res = await fetch('https://api.resend.com/api-keys', {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (res.ok) {
+          return {
+            configured: true,
+            hasAppPassword: false,
+            authMethod: 'Resend API (HTTPS)',
+            verified: true,
+            portUsed: 443,
+          };
+        } else {
+          const body = (await res.json().catch(() => ({}))) as any;
+          const errMsg = body?.message || `HTTP ${res.status}`;
+          return {
+            configured: true,
+            hasAppPassword: false,
+            authMethod: 'Resend API (HTTPS)',
+            verified: false,
+            portUsed: 443,
+            error: `Resend API authentication failed: ${errMsg}`,
+            troubleshooting: 'Please verify that your RESEND_API_KEY is correct in your environment variables.',
+          };
+        }
+      } catch (err: any) {
+        return {
+          configured: true,
+          hasAppPassword: false,
+          authMethod: 'Resend API (HTTPS)',
+          verified: false,
+          portUsed: 443,
+          error: `Resend connection failed: ${err.message}`,
+          troubleshooting: 'Ensure outbound HTTPS port 443 traffic to api.resend.com is permitted.',
+        };
+      }
+    }
+
+    if (provider === 'brevo') {
+      const apiKey = process.env.BREVO_API_KEY?.trim() || '';
+      try {
+        const res = await fetch('https://api.brevo.com/v3/account', {
+          method: 'GET',
+          headers: { 'api-key': apiKey },
+        });
+        if (res.ok) {
+          return {
+            configured: true,
+            hasAppPassword: false,
+            authMethod: 'Brevo API (HTTPS)',
+            verified: true,
+            portUsed: 443,
+          };
+        } else {
+          const body = (await res.json().catch(() => ({}))) as any;
+          const errMsg = body?.message || `HTTP ${res.status}`;
+          return {
+            configured: true,
+            hasAppPassword: false,
+            authMethod: 'Brevo API (HTTPS)',
+            verified: false,
+            portUsed: 443,
+            error: `Brevo API authentication failed: ${errMsg}`,
+            troubleshooting: 'Please verify that your BREVO_API_KEY is correct in your environment variables.',
+          };
+        }
+      } catch (err: any) {
+        return {
+          configured: true,
+          hasAppPassword: false,
+          authMethod: 'Brevo API (HTTPS)',
+          verified: false,
+          portUsed: 443,
+          error: `Brevo connection failed: ${err.message}`,
+          troubleshooting: 'Ensure outbound HTTPS port 443 traffic to api.brevo.com is permitted.',
+        };
+      }
+    }
+
+    if (provider === 'gmail_api') {
+      return {
+        configured: true,
+        hasAppPassword: false,
+        authMethod: 'Gmail OAuth2',
+        verified: true,
+        portUsed: 443,
+      };
+    }
+
+    // SMTP Fallback
     const authMethod = (gmailUser && hasAppPassword)
       ? 'Gmail App Password (SMTP)'
       : process.env.SMTP_HOST
@@ -1810,7 +1871,7 @@ IMPORTANT:
       troubleshooting: lastError.includes('535')
         ? 'Google rejected your App Password. Confirm that 2-Step Verification is active on that Google account, generate a new 16-character App Password at https://myaccount.google.com/apppasswords, and check Google Security Alerts to approve sign-in from your cloud deployment.'
         : lastError.includes('Timed Out')
-        ? 'Connection to Google SMTP timed out on ports 465 and 587. Check if your hosting provider allows outbound SMTP traffic.'
+        ? 'Connection to Google SMTP timed out on ports 465 and 587. The hosting platform firewall blocks outbound SMTP. Recommended Solution: Add RESEND_API_KEY in your hosting environment variables (e.g., Render Dashboard) to send emails via HTTPS port 443 without firewall blocking.'
         : 'Verify your email settings and network connectivity.',
     };
   }

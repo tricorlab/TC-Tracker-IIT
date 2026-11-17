@@ -13,11 +13,13 @@ async function main() {
   console.log('TC Tracker — Email Configuration & Connection Test');
   console.log('====================================================');
 
+  const resendKey = process.env.RESEND_API_KEY?.trim();
+  const brevoKey = process.env.BREVO_API_KEY?.trim();
   const gmailUser = process.env.GMAIL_USER?.trim();
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS)?.trim();
   const adminGmail = (process.env.ADMIN_GMAIL || process.env.ADMIN_EMAIL)?.trim();
+  const provider = emailService.getActiveProvider();
 
-  // Masked diagnostic display (protecting user credentials)
   const maskEmail = (em?: string) => {
     if (!em) return '<NOT SET>';
     const parts = em.split('@');
@@ -27,35 +29,38 @@ async function main() {
     return `${visible}***@${parts[1]}`;
   };
 
+  const maskSecret = (sec?: string) => {
+    if (!sec) return '<NOT SET>';
+    if (sec.length <= 8) return '********';
+    return `${sec.substring(0, 4)}...${sec.substring(sec.length - 4)} (${sec.length} chars)`;
+  };
+
+  console.log(`Active Provider    : ${provider ? provider.toUpperCase() : '<NONE>'}`);
+  console.log(`RESEND_API_KEY     : ${maskSecret(resendKey)}`);
+  console.log(`BREVO_API_KEY      : ${maskSecret(brevoKey)}`);
   console.log(`GMAIL_USER         : ${maskEmail(gmailUser)}`);
-  console.log(`GMAIL_APP_PASSWORD : ${gmailPass ? `CONFIGURED (${gmailPass.length} chars, spaces removed: ${gmailPass.replace(/\s+/g, '').length})` : '<NOT SET>'}`);
+  console.log(`GMAIL_APP_PASSWORD : ${gmailPass ? `CONFIGURED (${gmailPass.length} chars)` : '<NOT SET>'}`);
   console.log(`ADMIN_GMAIL        : ${maskEmail(adminGmail)}`);
   console.log(`isEmailConfigured  : ${emailService.isEmailConfigured()}`);
   console.log('----------------------------------------------------');
 
   if (!emailService.isEmailConfigured()) {
-    console.error('ERROR: Email is not fully configured. Please ensure GMAIL_USER and GMAIL_APP_PASSWORD are set in backend/.env');
+    console.error('ERROR: Email is not fully configured. Please set RESEND_API_KEY (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env');
     process.exit(1);
   }
 
-  const transporterObj = emailService.getNodemailerTransporter();
-  if (!transporterObj) {
-    console.error('ERROR: Failed to initialize Nodemailer transporter.');
-    process.exit(1);
-  }
+  console.log(`Verifying connection for active provider (${provider})...`);
+  const diag = await emailService.verifyConnection();
 
-  console.log(`Verifying SMTP connection to Google Mail server (${transporterObj.from})...`);
-
-  try {
-    await transporterObj.transporter.verify();
-    console.log('SUCCESS: Nodemailer successfully authenticated with Gmail SMTP servers!');
-  } catch (verifyErr: any) {
-    console.error(`SMTP Verification Failed: ${verifyErr.message}`);
-    if (verifyErr.code === 'EAUTH') {
-      console.error('Hint: Google rejected authentication. Verify that 2-Step Verification is active and the 16-character App Password is correct.');
+  if (!diag.verified) {
+    console.error(`Verification Failed: ${diag.error}`);
+    if (diag.troubleshooting) {
+      console.error(`Troubleshooting: ${diag.troubleshooting}`);
     }
     process.exit(1);
   }
+
+  console.log(`SUCCESS: ${diag.authMethod} connection verified successfully (Port ${diag.portUsed || 443})!`);
 
   if (adminGmail) {
     console.log(`Sending a test formal leave notification email to Admin (${maskEmail(adminGmail)})...`);
@@ -74,25 +79,23 @@ async function main() {
     const textBody = emailService.generatePlainTextEmail(testPayload);
     const htmlBody = emailService.generateHtmlEmail(testPayload);
 
-    try {
-      const info = await transporterObj.transporter.sendMail({
-        from: `"TC Tracker Leave Management" <${transporterObj.from}>`,
-        to: adminGmail,
-        replyTo: testPayload.staffEmail ? `"${testPayload.staffName}" <${testPayload.staffEmail}>` : undefined,
-        subject: 'TC Tracker — New Leave Request (Configuration Verification)',
-        text: textBody,
-        html: htmlBody,
-      });
+    const sendResult = await emailService.sendDirectEmail({
+      fromName: 'TC Tracker Leave Management',
+      to: adminGmail,
+      replyTo: testPayload.staffEmail ? `"${testPayload.staffName}" <${testPayload.staffEmail}>` : undefined,
+      subject: 'TC Tracker — New Leave Request (Configuration Verification)',
+      text: textBody,
+      html: htmlBody,
+    });
 
-      console.log(`SUCCESS: Test formal leave email delivered to Admin's Gmail!`);
-      console.log(`Message ID: ${info.messageId}`);
-      console.log(`Accepted: ${JSON.stringify(info.accepted)}`);
-    } catch (sendErr: any) {
-      console.error(`Send Email Failed: ${sendErr.message}`);
+    if (sendResult.success) {
+      console.log(`SUCCESS: Test formal leave email delivered to Admin's email!`);
+    } else {
+      console.error(`Send Email Failed: ${sendResult.errorMessage}`);
       process.exit(1);
     }
   } else {
-    console.log('NOTE: ADMIN_GMAIL is not explicitly set; emails will target active Admins from the Users worksheet.');
+    console.log('NOTE: ADMIN_GMAIL is not explicitly set; leave notifications target active Admins from the database.');
   }
 
   console.log('====================================================');
