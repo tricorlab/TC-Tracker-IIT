@@ -60,6 +60,14 @@ export interface WelcomeCredentialsEmailPayload {
   loginUrl?: string;
 }
 
+export interface AdminPasswordResetEmailPayload {
+  staffName: string;
+  staffEmail: string;
+  temporaryPassword: string;
+  loginUrl?: string;
+  adminName?: string;
+}
+
 export interface PasswordResetEmailPayload {
   staffName: string;
   staffEmail: string;
@@ -110,6 +118,31 @@ export class EmailService {
   }
 
   /**
+   * Helper to resolve the sender/system Gmail address from environment variables.
+   * Supports standard GMAIL_USER, ADMIN_GMAIL, and EMAIL_USER to handle varied cloud deployment configs.
+   */
+  public getResolvedGmailUser(): string | undefined {
+    const raw =
+      process.env.GMAIL_USER ||
+      process.env.ADMIN_GMAIL ||
+      process.env.EMAIL_USER;
+    return raw?.replace(/^["']|["']$/g, '').trim() || undefined;
+  }
+
+  /**
+   * Helper to resolve the Gmail App Password from environment variables.
+   * Automatically strips internal spaces and surrounding quotes.
+   */
+  public getResolvedGmailAppPassword(): string | undefined {
+    const raw =
+      process.env.GMAIL_APP_PASSWORD ||
+      process.env.GMAIL_PASS ||
+      process.env.EMAIL_PASS ||
+      process.env.EMAIL_PASSWORD;
+    return raw ? raw.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim() : undefined;
+  }
+
+  /**
    * Check if live email credentials (Gmail App Password, SMTP, or Gmail API OAuth2) are configured.
    */
   public isEmailConfigured(): boolean {
@@ -119,11 +152,8 @@ export class EmailService {
     this.reloadEnv();
 
     // 1. Check Gmail SMTP / App Password
-    const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
-    const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
-    const gmailAppPassword = rawPass
-      ? rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim()
-      : '';
+    const gmailUser = this.getResolvedGmailUser();
+    const gmailAppPassword = this.getResolvedGmailAppPassword();
     if (gmailUser && gmailAppPassword) {
       return true;
     }
@@ -177,11 +207,8 @@ export class EmailService {
    */
   public getNodemailerTransporter(portOverride?: number): { transporter: Transporter; from: string; port: number } | null {
     this.reloadEnv();
-    const gmailUser = process.env.GMAIL_USER?.replace(/^["']|["']$/g, '').trim();
-    const rawPass = process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS;
-    const gmailAppPassword = rawPass
-      ? rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim()
-      : '';
+    const gmailUser = this.getResolvedGmailUser();
+    const gmailAppPassword = this.getResolvedGmailAppPassword();
 
     if (gmailUser && gmailAppPassword) {
       const port = portOverride || (process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 465);
@@ -1251,6 +1278,210 @@ If you have any questions, please contact your administrator.
     const logRecord: EmailLogRow = {
       EmailLogID: logId,
       RelatedLeaveRequestID: 'USER_ONBOARDING',
+      RecipientEmail: recipient || 'unknown@domain.local',
+      DeliveryStatus: deliveryStatus,
+      ErrorMessage: errorMessage,
+      AttemptedAt: attemptedAt,
+      SentAt: sentAt,
+    };
+
+    if (googleSheetsService.isLiveApiEnabled()) {
+      try {
+        await googleSheetsService.appendSheetRow(SHEET_NAMES.EMAIL_LOGS, [
+          logRecord.EmailLogID,
+          logRecord.RelatedLeaveRequestID,
+          logRecord.RecipientEmail,
+          logRecord.DeliveryStatus,
+          logRecord.ErrorMessage,
+          logRecord.AttemptedAt,
+          logRecord.SentAt,
+        ]);
+      } catch (sheetErr: any) {
+        console.error('[EmailService Error] Failed to append email log:', sheetErr.message);
+      }
+    }
+
+    this.mockEmailLogs.push(logRecord);
+
+    return {
+      dispatched: deliveryStatus === 'Sent',
+      log: logRecord,
+    };
+  }
+
+  /**
+   * Send administrative password reset credentials email to an existing employee.
+   * Delivers fresh temporary credentials and instructs them to set a new password upon login.
+   */
+  public async sendAdminPasswordResetEmail(
+    payload: AdminPasswordResetEmailPayload
+  ): Promise<{ dispatched: boolean; log: EmailLogRow }> {
+    const logId = `EML-ADM-RST-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const attemptedAt = new Date().toISOString();
+    const recipient = (payload.staffEmail || '').trim().toLowerCase();
+    const loginUrl =
+      payload.loginUrl ||
+      (process.env.FRONTEND_URL
+        ? `${process.env.FRONTEND_URL.replace(/\/+$/, '')}/login`
+        : 'http://localhost:5173/login');
+    const emailSubject = 'TC Tracker — Temporary Login Credentials (Password Reset)';
+    const adminLabel = payload.adminName ? `Administrator (${payload.adminName})` : 'An administrator';
+
+    const textBody = `
+============================================================
+TC TRACKER — TEMPORARY LOGIN CREDENTIALS
+============================================================
+
+Hello ${payload.staffName},
+
+${adminLabel} has reset your TC Tracker account password.
+Below are your new temporary login credentials:
+
+YOUR TEMPORARY CREDENTIALS:
+------------------------------------------------------------
+Login ID (Email):   ${recipient}
+Temporary Password: ${payload.temporaryPassword}
+Portal Login URL:   ${loginUrl}
+
+MANDATORY SECURITY REQUIREMENT:
+For your account security, this temporary password must be changed
+immediately upon signing in. You will be prompted to create a new,
+private password as soon as you log in.
+
+If you did not request this password reset or believe this was done in error,
+please contact your administrator immediately.
+============================================================
+`.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
+    .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 600px; margin: 0 auto; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .header { background: linear-gradient(135deg, #1e3a8a, #2563eb); color: #ffffff; padding: 24px; text-align: center; }
+    .header h1 { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -0.025em; }
+    .content { padding: 24px; }
+    .greeting { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #0f172a; }
+    .lead { font-size: 14px; line-height: 1.5; color: #475569; margin-bottom: 20px; }
+    .credentials-box { background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 18px; margin-bottom: 20px; }
+    .cred-label { font-weight: 600; color: #475569; font-size: 13px; }
+    .cred-value { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-weight: 700; color: #0f172a; }
+    .badge-pass { background-color: #e0e7ff; color: #3730a3; padding: 6px 12px; border-radius: 4px; font-size: 16px; letter-spacing: 0.05em; display: inline-block; }
+    .alert-box { background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin-bottom: 24px; font-size: 13px; color: #92400e; }
+    .btn-container { text-align: center; margin: 24px 0; }
+    .btn { display: inline-block; background-color: #2563eb; color: #ffffff !important; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; }
+    .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px; text-align: center; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>TC Tracker Portal</h1>
+    </div>
+    <div class="content">
+      <div class="greeting">Hello, ${escapeHtml(payload.staffName)}!</div>
+      <p class="lead">${escapeHtml(adminLabel)} has reset your account password. Below are your new temporary sign-in credentials:</p>
+      
+      <div class="credentials-box">
+        <div style="margin-bottom: 12px;">
+          <span class="cred-label">Login ID / Email:</span><br>
+          <span class="cred-value" style="font-size: 15px;">${escapeHtml(recipient)}</span>
+        </div>
+        <div>
+          <span class="cred-label">Temporary Password:</span><br>
+          <span class="badge-pass cred-value">${escapeHtml(payload.temporaryPassword)}</span>
+        </div>
+      </div>
+
+      <div class="alert-box">
+        <strong>Mandatory Action Required:</strong> For your security, you are required to change this temporary password immediately after signing in.
+      </div>
+
+      <div class="btn-container">
+        <a href="${escapeHtml(loginUrl)}" class="btn" target="_blank" rel="noopener noreferrer">Sign In &amp; Set New Password</a>
+      </div>
+    </div>
+    <div class="footer">
+      Automated credential reset notification &bull; TC Tracker Internal Portal
+    </div>
+  </div>
+</body>
+</html>
+`.trim();
+
+    const isTest = process.env.NODE_ENV === 'test';
+    let deliveryStatus: 'Pending' | 'Sent' | 'Failed' = 'Pending';
+    let errorMessage = '';
+    let sentAt = '';
+
+    const nodemailerTransporter = this.getNodemailerTransporter();
+    const gmailClient = this.getGmailClient();
+
+    if (this.customDispatcher && recipient) {
+      try {
+        await this.customDispatcher({
+          to: recipient,
+          from: 'notifications@tc-tracker.local',
+          subject: emailSubject,
+          text: textBody,
+          html: htmlBody,
+        });
+        deliveryStatus = 'Sent';
+        sentAt = new Date().toISOString();
+      } catch (err: any) {
+        deliveryStatus = 'Failed';
+        errorMessage = err?.message || 'Custom dispatcher transmission failure';
+      }
+    } else if (isTest && recipient) {
+      deliveryStatus = 'Sent';
+      sentAt = new Date().toISOString();
+    } else if (nodemailerTransporter && recipient) {
+      const sendResult = await this.sendNodemailerMail({
+        fromName: 'TC Tracker Security',
+        fromEmail: nodemailerTransporter.from,
+        to: recipient,
+        subject: emailSubject,
+        text: textBody,
+        html: htmlBody,
+      });
+
+      if (sendResult.success) {
+        deliveryStatus = 'Sent';
+        sentAt = new Date().toISOString();
+      } else {
+        deliveryStatus = 'Failed';
+        errorMessage = sendResult.errorMessage || 'Nodemailer SMTP transmission failure';
+      }
+    } else if (gmailClient && recipient) {
+      try {
+        const raw = this.buildRawMimeMessage({
+          from: gmailClient.from,
+          to: recipient,
+          subject: emailSubject,
+          textBody,
+          htmlBody,
+        });
+        await gmailClient.gmail.users.messages.send({
+          userId: 'me',
+          requestBody: { raw },
+        });
+        deliveryStatus = 'Sent';
+        sentAt = new Date().toISOString();
+      } catch (err: any) {
+        deliveryStatus = 'Failed';
+        const rawMsg = err?.message || 'Gmail API transmission failure';
+        errorMessage = rawMsg.replace(/bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+      }
+    } else {
+      deliveryStatus = 'Failed';
+      errorMessage = 'Email service credentials not configured. Please set GMAIL_USER (or ADMIN_GMAIL) and GMAIL_APP_PASSWORD in environment to send live emails.';
+    }
+
+    const logRecord: EmailLogRow = {
+      EmailLogID: logId,
+      RelatedLeaveRequestID: 'ADMIN_PASSWORD_RESET',
       RecipientEmail: recipient || 'unknown@domain.local',
       DeliveryStatus: deliveryStatus,
       ErrorMessage: errorMessage,

@@ -306,7 +306,7 @@ export async function resetPasswordApi(
  */
 export async function adminResetPasswordApi(
   targetUserId: string
-): Promise<{ success: boolean; temporaryPassword?: string; message: string }> {
+): Promise<{ success: boolean; temporaryPassword?: string; emailSent?: boolean; message: string; errorMessage?: string }> {
   return apiFetch('/api/auth/admin/reset-password', {
     method: 'POST',
     body: JSON.stringify({ targetUserId }),

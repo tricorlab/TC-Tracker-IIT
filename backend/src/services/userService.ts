@@ -1166,7 +1166,13 @@ export class UserService {
   public async adminResetPassword(
     adminUser: AuthenticatedUserContext,
     targetUserId: string
-  ): Promise<{ success: boolean; temporaryPassword: string; message: string }> {
+  ): Promise<{
+    success: boolean;
+    temporaryPassword: string;
+    emailSent: boolean;
+    message: string;
+    errorMessage?: string;
+  }> {
     if (adminUser.role !== 'Admin') {
       throw new UserVerificationError('Only Administrators can reset staff passwords.', 403);
     }
@@ -1194,16 +1200,24 @@ export class UserService {
 
     await this.persistUserRow(updatedUser);
 
-    // Send credentials email
+    // Send credentials email via dedicated admin password reset template
+    let emailDispatched = false;
+    let emailErrorMessage = '';
     try {
-      await emailService.sendWelcomeCredentialsEmail({
+      const emailResult = await emailService.sendAdminPasswordResetEmail({
         staffName: user.FullName,
         staffEmail: user.Email,
         temporaryPassword: tempPassword,
         loginUrl: `${config.frontendUrl}/login`,
+        adminName: adminUser.fullName,
       });
+      emailDispatched = emailResult.dispatched;
+      if (!emailResult.dispatched && emailResult.log?.ErrorMessage) {
+        emailErrorMessage = emailResult.log.ErrorMessage;
+      }
     } catch (err: any) {
       console.error('[UserService] Failed to dispatch admin-reset email:', err.message);
+      emailErrorMessage = err.message;
     }
 
     await activityLogService.logActivity({
@@ -1214,10 +1228,16 @@ export class UserService {
       reason: `Admin ${adminUser.fullName} reset password for ${user.FullName} (${user.Email})`,
     });
 
+    const message = emailDispatched
+      ? `Password has been reset and emailed to ${user.Email}.`
+      : `Password has been reset, but email could not be sent (${emailErrorMessage || 'email service not configured'}). Please provide the temporary password directly to the user.`;
+
     return {
       success: true,
+      emailSent: emailDispatched,
       temporaryPassword: tempPassword,
-      message: `Password has been reset and emailed to ${user.Email}.`,
+      message,
+      errorMessage: emailErrorMessage || undefined,
     };
   }
 

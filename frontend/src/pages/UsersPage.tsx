@@ -24,6 +24,8 @@ import {
   KeyRound,
   Trash2,
   UserX,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 const TODAY_DATE_STR = new Date().toISOString().split('T')[0];
@@ -69,6 +71,23 @@ export const UsersPage: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<UserItem | null>(null);
   const [submittingDelete, setSubmittingDelete] = useState<boolean>(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Temporary Credentials & Email Status Modal State
+  const [resetModalData, setResetModalData] = useState<{
+    isOpen: boolean;
+    targetUser: UserItem | null;
+    temporaryPassword: string;
+    emailSent: boolean;
+    message: string;
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    targetUser: null,
+    temporaryPassword: '',
+    emailSent: true,
+    message: '',
+  });
+  const [copiedPass, setCopiedPass] = useState<boolean>(false);
 
   const isUserActive = (isActive: boolean | string | number): boolean => {
     if (typeof isActive === 'boolean') return isActive;
@@ -216,10 +235,34 @@ export const UsersPage: React.FC = () => {
 
     try {
       const res = await adminResetPasswordApi(targetUser.UserID);
-      toast.success(res.message || 'Password reset and emailed successfully.', 'Password Reset');
+      setResetModalData({
+        isOpen: true,
+        targetUser,
+        temporaryPassword: res.temporaryPassword || '',
+        emailSent: res.emailSent !== false,
+        message: res.message,
+        errorMessage: res.errorMessage,
+      });
+      setCopiedPass(false);
+
+      if (res.emailSent === false) {
+        toast.warning(
+          res.message || 'Password was reset, but email delivery could not be completed.',
+          'Password Reset Notice'
+        );
+      } else {
+        toast.success(res.message || 'Password reset and emailed successfully.', 'Password Reset');
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to reset password.', 'Reset Failed');
     }
+  };
+
+  const copyTemporaryPassword = () => {
+    if (!resetModalData.temporaryPassword) return;
+    navigator.clipboard.writeText(resetModalData.temporaryPassword);
+    setCopiedPass(true);
+    setTimeout(() => setCopiedPass(false), 2500);
   };
 
   const openDeleteModal = (target: UserItem) => {
@@ -849,6 +892,100 @@ export const UsersPage: React.FC = () => {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Temporary Password & Email Status Modal */}
+      {resetModalData.isOpen && resetModalData.targetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-700 px-6 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-amber-300" />
+                <h3 className="font-bold text-lg">Temporary Login Credentials</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetModalData((prev) => ({ ...prev, isOpen: false }))}
+                className="text-white/80 hover:text-white rounded-lg p-1 transition cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  Employee
+                </p>
+                <p className="text-sm font-bold text-slate-900">
+                  {resetModalData.targetUser.FullName}
+                </p>
+                <p className="text-xs text-slate-600 font-mono">
+                  {resetModalData.targetUser.Email}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                  New Temporary Password
+                </p>
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-300 rounded-lg p-2.5">
+                  <span className="font-mono font-bold text-base text-blue-900 flex-1 tracking-wider select-all">
+                    {resetModalData.temporaryPassword}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={copyTemporaryPassword}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition shadow-sm cursor-pointer"
+                  >
+                    {copiedPass ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-white" />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {resetModalData.emailSent ? (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Email Dispatched:</span> Credentials email sent to{' '}
+                    <span className="font-semibold">{resetModalData.targetUser.Email}</span>. The employee will be required to set a new password upon logging in.
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold">Email Notice:</span> Could not dispatch credentials email ({resetModalData.errorMessage || 'Email service not configured in environment'}).
+                    <p className="mt-1 font-semibold text-amber-800">
+                      Please copy the temporary password above and share it with the user directly.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setResetModalData((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>
