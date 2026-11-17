@@ -129,7 +129,19 @@ export class UserService {
       return records;
     } catch (error: any) {
       console.error('[UserService Error] Failed to fetch users from Google Sheets:', error?.message);
-      throw new UserVerificationError('Database service error during user lookup.', 503);
+      if (this.cachedRecords.length > 0) {
+        console.warn('[UserService] Serving from cached records due to Google Sheets connection error.');
+        return [...this.cachedRecords];
+      }
+      const cachedUsers = Array.from(this.cache.values()).map((c) => c.user);
+      if (cachedUsers.length > 0) {
+        console.warn('[UserService] Serving from in-memory user cache due to Google Sheets connection error.');
+        return cachedUsers;
+      }
+      throw new UserVerificationError(
+        `Database service error during user lookup: ${error?.message || 'Connection failed'}`,
+        503
+      );
     }
   }
 

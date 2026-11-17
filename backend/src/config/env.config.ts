@@ -97,14 +97,44 @@ export const config: EnvConfig = {
   isProduction,
   isTest,
   google: {
-    clientId: (process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '').replace(/^["']|["']$/g, '').trim(),
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-    redirectUri: process.env.GOOGLE_REDIRECT_URI || '',
-    serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
-    privateKey: process.env.GOOGLE_PRIVATE_KEY
-      ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
-      : '',
-    spreadsheetId: (process.env.GOOGLE_SPREADSHEET_ID || '').replace(/^["']|["']$/g, '').trim(),
+    clientId: (
+      process.env.GOOGLE_OAUTH_CLIENT_ID ||
+      process.env.GOOGLE_CLIENT_ID ||
+      process.env.CLIENT_ID ||
+      ''
+    )
+      .replace(/^["']|["']$/g, '')
+      .trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET || process.env.CLIENT_SECRET || '')
+      .replace(/^["']|["']$/g, '')
+      .trim(),
+    redirectUri: (process.env.GOOGLE_REDIRECT_URI || process.env.REDIRECT_URI || '')
+      .replace(/^["']|["']$/g, '')
+      .trim(),
+    serviceAccountEmail: (
+      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ||
+      process.env.SERVICE_ACCOUNT_EMAIL ||
+      ''
+    )
+      .replace(/^["']|["']$/g, '')
+      .trim(),
+    privateKey: (() => {
+      const raw = process.env.GOOGLE_PRIVATE_KEY || process.env.PRIVATE_KEY || '';
+      if (!raw) return '';
+      return raw
+        .trim()
+        .replace(/^["']|["']$/g, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '')
+        .trim();
+    })(),
+    spreadsheetId: (
+      process.env.GOOGLE_SPREADSHEET_ID ||
+      process.env.SPREADSHEET_ID ||
+      ''
+    )
+      .replace(/^["']|["']$/g, '')
+      .trim(),
     driveBackupFolderId: (process.env.GOOGLE_DRIVE_BACKUP_FOLDER_ID || '').replace(/^["']|["']$/g, '').trim(),
     enableDriveBackup: process.env.ENABLE_GOOGLE_DRIVE_BACKUP !== 'false',
   },

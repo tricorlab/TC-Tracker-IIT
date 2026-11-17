@@ -177,6 +177,41 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Format descriptive and actionable error messages for Google Sheets API failures.
+   */
+  public formatGoogleError(error: any): string {
+    const rawMsg = error?.message || 'Google Sheets API error';
+    const statusCode = error?.status || error?.code || error?.response?.status;
+
+    if (rawMsg.includes('The caller does not have permission') || statusCode === 403) {
+      return `Google Permission Denied (403): The Service Account '${config.google.serviceAccountEmail || 'configured'}' does not have Editor access to spreadsheet '${config.google.spreadsheetId}'. Please open the Google Spreadsheet -> Share -> add the service account email as Editor.`;
+    }
+
+    if (rawMsg.includes('Requested entity was not found') || statusCode === 404) {
+      return `Google Spreadsheet Not Found (404): Spreadsheet ID '${config.google.spreadsheetId}' does not exist or is not accessible. Verify GOOGLE_SPREADSHEET_ID in environment variables.`;
+    }
+
+    if (
+      rawMsg.includes('invalid_grant') ||
+      rawMsg.includes('PEM') ||
+      rawMsg.includes('start line') ||
+      rawMsg.includes('no start line')
+    ) {
+      return `Google Service Account Authentication Failed: Invalid private key format or clock skew. Ensure GOOGLE_PRIVATE_KEY contains the complete '-----BEGIN PRIVATE KEY-----' to '-----END PRIVATE KEY-----' block with proper newlines. Details: ${rawMsg}`;
+    }
+
+    if (error?.code === 'ETIMEDOUT' || error?.code === 'ESOCKETTIMEDOUT' || rawMsg.includes('timeout')) {
+      return `Google API Connection Timed Out: Outbound request to Google Sheets timed out. Ensure cloud hosting allows outbound HTTPS traffic.`;
+    }
+
+    if (rawMsg.includes('Unable to parse range')) {
+      return `Google Worksheet Range Error: ${rawMsg}. Ensure the worksheet exists in the spreadsheet or initialize it via Database Doctor.`;
+    }
+
+    return rawMsg;
+  }
+
+  /**
    * Authenticate and initialize the Google Sheets API client using Service Account.
    */
   public async getClient(): Promise<sheets_v4.Sheets> {
@@ -184,6 +219,10 @@ export class GoogleSheetsService {
       throw new Error(
         'Google Sheets service is not configured. Missing GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY, or GOOGLE_SPREADSHEET_ID.'
       );
+    }
+
+    if (this.sheetsClient) {
+      return this.sheetsClient;
     }
 
     try {
@@ -196,7 +235,7 @@ export class GoogleSheetsService {
       this.sheetsClient = google.sheets({ version: 'v4', auth });
       return this.sheetsClient;
     } catch (error: any) {
-      throw new Error(`Failed to initialize Google Sheets client: ${error?.message || 'Unknown error'}`);
+      throw new Error(`Failed to initialize Google Sheets client: ${this.formatGoogleError(error)}`);
     }
   }
 
@@ -242,7 +281,7 @@ export class GoogleSheetsService {
       if (error?.message?.includes('Unable to parse range') || error?.code === 400) {
         throw new Error(`Worksheet or range '${range}' not found in spreadsheet.`);
       }
-      throw error;
+      throw new Error(this.formatGoogleError(error));
     }
   }
 
