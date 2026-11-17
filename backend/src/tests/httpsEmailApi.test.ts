@@ -179,4 +179,60 @@ describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---',
     assert.strictEqual(diag.verified, true);
     assert.strictEqual(diag.portUsed, 443);
   });
+
+  it('9. sendResendMail falls back to onboarding@resend.dev when EMAIL_FROM is a public gmail.com address', async () => {
+    process.env.RESEND_API_KEY = 're_test_key_valid';
+    process.env.GMAIL_USER = 'tricorlab@gmail.com';
+    process.env.EMAIL_FROM = 'tricorlab@gmail.com';
+
+    let capturedOptions: any = null;
+    globalThis.fetch = (async (_url: any, opts: any) => {
+      capturedOptions = opts;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: 'resend_ok_1' }),
+      } as any;
+    }) as any;
+
+    const result = await emailService.sendResendMail({
+      to: 'staff@domain.com',
+      subject: 'Test Subject',
+      text: 'Body',
+      html: '<p>Body</p>',
+    });
+
+    assert.strictEqual(result.success, true);
+    const body = JSON.parse(capturedOptions.body);
+    // Crucial: Must NOT send from @gmail.com to prevent Resend 403 error
+    assert.strictEqual(body.from, 'TC Tracker <onboarding@resend.dev>');
+    // Crucial: reply_to receives the admin's Gmail address
+    assert.strictEqual(body.reply_to, 'tricorlab@gmail.com');
+  });
+
+  it('10. sendResendMail formats actionable message when 403 unverified domain occurs', async () => {
+    process.env.RESEND_API_KEY = 're_test_key_valid';
+
+    globalThis.fetch = (async () => {
+      return {
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        json: async () => ({
+          message: 'The gmail.com domain is not verified. Please, add and verify your domain on https://resend.com/domains',
+        }),
+      } as any;
+    }) as any;
+
+    const result = await emailService.sendResendMail({
+      to: 'staff@domain.com',
+      subject: 'Test',
+      text: 'Test',
+      html: '<p>Test</p>',
+    });
+
+    assert.strictEqual(result.success, false);
+    assert.ok(result.errorMessage?.includes('Resend Domain Notice (403)'));
+    assert.ok(result.errorMessage?.includes('onboarding@resend.dev'));
+  });
 });

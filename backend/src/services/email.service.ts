@@ -355,11 +355,15 @@ export class EmailService {
     }
 
     const defaultFrom = 'TC Tracker <onboarding@resend.dev>';
-    const configuredFrom =
-      process.env.RESEND_FROM ||
-      process.env.EMAIL_FROM ||
-      (options.fromName && process.env.GMAIL_USER ? `"${options.fromName}" <${process.env.GMAIL_USER}>` : undefined);
-    const from = configuredFrom || defaultFrom;
+    const rawConfiguredFrom = (process.env.RESEND_FROM || process.env.EMAIL_FROM || '').trim();
+
+    // Resend requires a domain you own. Public webmail domains (@gmail.com, @yahoo.com, etc.)
+    // cannot be verified on Resend and will trigger a 403 error.
+    const isPublicWebmail = /@(gmail|googlemail|yahoo|outlook|hotmail|live|icloud)\.com/i.test(rawConfiguredFrom);
+    const from = (rawConfiguredFrom && !isPublicWebmail) ? rawConfiguredFrom : defaultFrom;
+
+    // Direct any recipient replies back to the administrator's email or GMAIL_USER
+    const replyTo = options.replyTo || process.env.ADMIN_GMAIL || process.env.GMAIL_USER;
 
     try {
       const response = await fetch('https://api.resend.com/emails', {
@@ -374,7 +378,7 @@ export class EmailService {
           subject: options.subject,
           text: options.text,
           html: options.html,
-          ...(options.replyTo ? { reply_to: options.replyTo } : {}),
+          ...(replyTo ? { reply_to: replyTo } : {}),
         }),
       });
 
@@ -382,6 +386,12 @@ export class EmailService {
 
       if (!response.ok) {
         const errorMsg = data?.message || data?.error || `HTTP ${response.status} ${response.statusText}`;
+        if (response.status === 403 && /domain is not verified/i.test(errorMsg)) {
+          return {
+            success: false,
+            errorMessage: `Resend Domain Notice (403): ${errorMsg}. Note: Resend's free test domain (onboarding@resend.dev) only allows sending to the email address registered with your Resend account. To send emails to all employees, add & verify a domain at https://resend.com/domains, or use Brevo (BREVO_API_KEY).`,
+          };
+        }
         return {
           success: false,
           errorMessage: `Resend API Error (${response.status}): ${errorMsg}`,
