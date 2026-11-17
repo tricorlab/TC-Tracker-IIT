@@ -515,6 +515,16 @@ export class UserService {
     }
 
     const now = new Date().toISOString();
+
+    // Security hardening: If role changed, email changed, or account deactivated,
+    // immediately revoke all active sessions across devices and purge pending reset OTPs/tokens.
+    const isRoleChanged = updates.role !== undefined && updates.role !== targetUser.Role;
+    const isEmailChanged =
+      updates.email !== undefined &&
+      updates.email.trim().toLowerCase() !== (targetUser.Email || '').trim().toLowerCase();
+    const isDeactivated = updates.isActive !== undefined && !this.parseIsActive(updates.isActive);
+    const shouldRevokeActiveSessions = isRoleChanged || isEmailChanged || isDeactivated;
+
     const updatedUser: UserRow = {
       UserID: targetUser.UserID,
       FullName: updates.fullName !== undefined ? updates.fullName.trim() : targetUser.FullName,
@@ -531,11 +541,11 @@ export class UserService {
       UpdatedAt: now,
       PasswordHash: targetUser.PasswordHash || '',
       MustChangePassword: targetUser.MustChangePassword || 'FALSE',
-      ResetToken: targetUser.ResetToken || '',
-      ResetOtp: targetUser.ResetOtp || '',
-      ResetTokenExpires: targetUser.ResetTokenExpires || '',
-      ResetOtpAttempts: targetUser.ResetOtpAttempts !== undefined ? targetUser.ResetOtpAttempts : 0,
-      PasswordChangedAt: targetUser.PasswordChangedAt || '',
+      ResetToken: shouldRevokeActiveSessions ? '' : (targetUser.ResetToken || ''),
+      ResetOtp: shouldRevokeActiveSessions ? '' : (targetUser.ResetOtp || ''),
+      ResetTokenExpires: shouldRevokeActiveSessions ? '' : (targetUser.ResetTokenExpires || ''),
+      ResetOtpAttempts: shouldRevokeActiveSessions ? 0 : (targetUser.ResetOtpAttempts !== undefined ? targetUser.ResetOtpAttempts : 0),
+      PasswordChangedAt: shouldRevokeActiveSessions ? now : (targetUser.PasswordChangedAt || ''),
     };
 
     if (googleSheetsService.isLiveApiEnabled()) {
@@ -697,11 +707,17 @@ export class UserService {
         mode: 'deleted',
       };
     } else {
-      // Soft Delete (Deactivation): Sets IsActive = 'FALSE'
+      // Soft Delete (Deactivation): Sets IsActive = 'FALSE', clears reset tokens, and revokes active sessions
+      const now = new Date().toISOString();
       const updatedUser: UserRow = {
         ...targetUser,
         IsActive: 'FALSE',
-        UpdatedAt: new Date().toISOString(),
+        ResetToken: '',
+        ResetOtp: '',
+        ResetTokenExpires: '',
+        ResetOtpAttempts: 0,
+        PasswordChangedAt: now,
+        UpdatedAt: now,
       };
 
       if (googleSheetsService.isLiveApiEnabled()) {
@@ -718,8 +734,19 @@ export class UserService {
         if (sheetRowIndex !== -1) {
           try {
             await googleSheetsService.updateSheetRange(
-              `${SHEET_NAMES.USERS}!F${sheetRowIndex}:H${sheetRowIndex}`,
-              [['FALSE', targetUser.CreatedAt, updatedUser.UpdatedAt]]
+              `${SHEET_NAMES.USERS}!F${sheetRowIndex}:O${sheetRowIndex}`,
+              [[
+                'FALSE',
+                targetUser.CreatedAt,
+                updatedUser.UpdatedAt,
+                targetUser.PasswordHash || '',
+                targetUser.MustChangePassword || '',
+                '',
+                '',
+                '',
+                '',
+                now,
+              ]]
             );
           } catch (err: any) {
             console.error('[UserService Error] Failed to deactivate user in Google Sheets:', err.message);

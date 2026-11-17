@@ -280,6 +280,35 @@ export class GoogleSheetsService {
   }
 
   /**
+   * Sanitizes a cell value before writing to Google Sheets to defend against
+   * Spreadsheet Formula Injection (CSV / Formula Injection, CWE-1236).
+   * If a string value starts with =, +, -, or @, Google Sheets evaluates it as an active formula.
+   * Prepending a single quote (') forces Google Sheets to store and display it strictly as literal text.
+   */
+  public sanitizeCellValue(value: any): any {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.startsWith('=') || trimmed.startsWith('@')) {
+        return `'${value}`;
+      }
+      if ((trimmed.startsWith('+') || trimmed.startsWith('-')) && isNaN(Number(trimmed))) {
+        return `'${value}`;
+      }
+    }
+    return value;
+  }
+
+  public sanitizeRow(row: any[]): any[] {
+    if (!Array.isArray(row)) return row;
+    return row.map((cell) => this.sanitizeCellValue(cell));
+  }
+
+  public sanitizeRows(rows: any[][]): any[][] {
+    if (!Array.isArray(rows)) return rows;
+    return rows.map((r) => this.sanitizeRow(r));
+  }
+
+  /**
    * Append a new row of values to a worksheet.
    */
   public async appendSheetRow(
@@ -287,6 +316,7 @@ export class GoogleSheetsService {
     values: any[]
   ): Promise<sheets_v4.Schema$AppendValuesResponse> {
     const sheets = await this.getClient();
+    const sanitizedValues = this.sanitizeRow(values);
     const response = await this.executeWithRetry(
       () =>
         sheets.spreadsheets.values.append({
@@ -295,7 +325,7 @@ export class GoogleSheetsService {
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: {
-            values: [values],
+            values: [sanitizedValues],
           },
         }),
       true
@@ -315,6 +345,7 @@ export class GoogleSheetsService {
       return {};
     }
     const sheets = await this.getClient();
+    const sanitizedRows = this.sanitizeRows(rows);
     const response = await this.executeWithRetry(
       () =>
         sheets.spreadsheets.values.append({
@@ -323,7 +354,7 @@ export class GoogleSheetsService {
           valueInputOption: 'USER_ENTERED',
           insertDataOption: 'INSERT_ROWS',
           requestBody: {
-            values: rows,
+            values: sanitizedRows,
           },
         }),
       true
@@ -340,6 +371,7 @@ export class GoogleSheetsService {
     values: any[][]
   ): Promise<sheets_v4.Schema$UpdateValuesResponse> {
     const sheets = await this.getClient();
+    const sanitizedValues = this.sanitizeRows(values);
     const response = await this.executeWithRetry(
       () =>
         sheets.spreadsheets.values.update({
@@ -347,7 +379,7 @@ export class GoogleSheetsService {
           range,
           valueInputOption: 'USER_ENTERED',
           requestBody: {
-            values,
+            values: sanitizedValues,
           },
         }),
       true
@@ -440,13 +472,17 @@ export class GoogleSheetsService {
   ): Promise<sheets_v4.Schema$BatchUpdateValuesResponse> {
     if (!data || data.length === 0) return {};
     const sheets = await this.getClient();
+    const sanitizedData = data.map((d) => ({
+      range: d.range,
+      values: this.sanitizeRows(d.values),
+    }));
     const response = await this.executeWithRetry(
       () =>
         sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: config.google.spreadsheetId,
           requestBody: {
             valueInputOption: 'USER_ENTERED',
-            data,
+            data: sanitizedData,
           },
         }),
       true

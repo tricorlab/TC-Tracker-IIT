@@ -106,16 +106,31 @@ export function createRateLimiter(options: RateLimiterOptions) {
 }
 
 /**
- * 1. Auth Rate Limiter: Max 20 requests per 15 minutes per IP.
- * Protects Google OAuth token verification from brute force / spam.
+ * 1. Auth IP Rate Limiter: Max 20 requests per 15 minutes per IP.
+ * Protects auth endpoints from high-volume network-level brute-force / spam.
  */
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 20,
-  message: 'Too many authentication attempts.',
+  message: 'Too many authentication attempts from this IP address.',
   keyGenerator: (req) => {
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
-    return `auth:${ip}`;
+    return `auth:ip:${ip}`;
+  },
+});
+
+/**
+ * 1b. Targeted Account Rate Limiter: Max 10 requests per 15 minutes per account.
+ * Defends against distributed credential-stuffing and password brute-force where bots rotate IP addresses to target a single account.
+ */
+export const accountRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 10,
+  message: 'Too many authentication attempts for this user account. Please try again in 15 minutes or reset your password.',
+  keyGenerator: (req) => {
+    const rawEmail = req.body?.email || req.query?.email;
+    const normalized = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    return normalized ? `auth:acct:${normalized}` : `auth:ip:${req.ip || 'unknown'}`;
   },
 });
 
