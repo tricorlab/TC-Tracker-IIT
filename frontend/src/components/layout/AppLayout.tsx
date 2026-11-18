@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
+import { MobileBottomNav } from './MobileBottomNav';
 import { useAuth } from '../../context/AuthContext';
 
 export const AppLayout: React.FC = () => {
@@ -58,12 +59,20 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className={`flex-1 flex flex-col min-w-0 ${user ? 'pb-20 md:pb-0' : ''}`}>
+        <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-8">
           <Outlet />
         </main>
         <Footer />
       </div>
+
+      {/* Mobile Ergonomic Bottom Tab Navigation */}
+      {user && (
+        <MobileBottomNav
+          onOpenSidebar={() => setSidebarOpen(true)}
+          sidebarOpen={sidebarOpen}
+        />
+      )}
     </div>
   );
 };

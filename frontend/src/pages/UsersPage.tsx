@@ -432,86 +432,166 @@ export const UsersPage: React.FC = () => {
             No team members found matching your search.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                <tr>
-                  <th className="px-4 py-3">Employee</th>
-                  <th className="px-4 py-3">User ID</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Joining Date</th>
-                  <th className="px-4 py-3">Account Status</th>
-                  {isAdmin && <th className="px-4 py-3 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredUsers.map((u) => {
-                  const active = isUserActive(u.IsActive);
-                  const isCurrent = isSelfAccount(u.UserID);
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50/50 border-b border-slate-200 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3">Employee</th>
+                    <th className="px-4 py-3">User ID</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Joining Date</th>
+                    <th className="px-4 py-3">Account Status</th>
+                    {isAdmin && <th className="px-4 py-3 text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredUsers.map((u) => {
+                    const active = isUserActive(u.IsActive);
+                    const isCurrent = isSelfAccount(u.UserID);
 
-                  return (
-                    <tr key={u.UserID} className="hover:bg-slate-50/60 transition">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900 flex items-center gap-2">
+                    return (
+                      <tr key={u.UserID} className="hover:bg-slate-50/60 transition">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-900 flex items-center gap-2">
+                            <span>{u.FullName}</span>
+                            {isCurrent && (
+                              <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-mono">{u.Email}</div>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-[11px] text-slate-600">
+                          {u.UserID}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={u.Role} size="sm" />
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
+                          {u.JoiningDate || '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={active ? 'Active' : 'Inactive'} size="sm" />
+                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleAdminResetPassword(u)}
+                              title="Reset password and email temporary credentials"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:text-amber-800 hover:bg-amber-50 border border-amber-200/60 rounded-lg transition cursor-pointer"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                              <span>Reset Pwd</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(u)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span>Edit</span>
+                            </button>
+                            {!isSelfAccount(u.UserID) && (
+                              <button
+                                type="button"
+                                onClick={() => openDeleteModal(u)}
+                                title="Delete or deactivate user"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200/60 rounded-lg transition cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove</span>
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredUsers.map((u) => {
+                const active = isUserActive(u.IsActive);
+                const isCurrent = isSelfAccount(u.UserID);
+
+                return (
+                  <div key={u.UserID} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
                           <span>{u.FullName}</span>
                           {isCurrent && (
-                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium border border-slate-200">
                               You
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono">{u.Email}</div>
-                      </td>
-                      <td className="px-4 py-3 font-mono text-[11px] text-slate-600">
-                        {u.UserID}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={u.Role} size="sm" />
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
-                        {u.JoiningDate || '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={active ? 'Active' : 'Inactive'} size="sm" />
-                      </td>
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-right space-x-1.5 whitespace-nowrap">
+                        <div className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
+                          {u.Email}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <StatusBadge status={u.Role} size="sm" />
+                          <StatusBadge status={active ? 'Active' : 'Inactive'} size="sm" />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {u.UserID}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
+                      <span>Joined: <strong className="font-mono text-slate-700">{u.JoiningDate || '—'}</strong></span>
+                    </div>
+
+                    {/* Mobile Action Buttons */}
+                    {isAdmin && (
+                      <div className="grid grid-cols-3 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleAdminResetPassword(u)}
+                          className="py-2 px-2 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/70 rounded-xl transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" />
+                          <span>Reset Pwd</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(u)}
+                          className="py-2 px-2 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        {!isSelfAccount(u.UserID) ? (
                           <button
                             type="button"
-                            onClick={() => handleAdminResetPassword(u)}
-                            title="Reset password and email temporary credentials"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:text-amber-800 hover:bg-amber-50 border border-amber-200/60 rounded-lg transition cursor-pointer"
+                            onClick={() => openDeleteModal(u)}
+                            className="py-2 px-2 text-[11px] font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/70 rounded-xl transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer"
                           >
-                            <KeyRound className="w-3.5 h-3.5" />
-                            <span>Reset Pwd</span>
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(u)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                            <span>Edit</span>
-                          </button>
-                          {!isSelfAccount(u.UserID) && (
-                            <button
-                              type="button"
-                              onClick={() => openDeleteModal(u)}
-                              title="Delete or deactivate user"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border border-rose-200/60 rounded-lg transition cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Remove</span>
-                            </button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        ) : (
+                          <div className="flex items-center justify-center text-[10px] text-slate-300 font-medium select-none">
+                            Self Account
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 

@@ -340,9 +340,9 @@ export const AdminDashboardView: React.FC = () => {
           {/* Section: Staff Metrics (4 Graphical Cards) */}
           <div>
             <h2 className="text-sm font-bold text-slate-800 mb-3 tracking-tight">Staff Metrics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
               {/* 1. Present Today */}
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
                     <CheckCircle2 className="w-4 h-4" />
@@ -371,7 +371,7 @@ export const AdminDashboardView: React.FC = () => {
               </div>
 
               {/* 2. Absent Today */}
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center">
                     <Clock className="w-4 h-4" />
@@ -402,7 +402,7 @@ export const AdminDashboardView: React.FC = () => {
               </div>
 
               {/* 3. Not Marked */}
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center">
                     <Clock className="w-4 h-4" />
@@ -431,7 +431,7 @@ export const AdminDashboardView: React.FC = () => {
               </div>
 
               {/* 4. Total Staff */}
-              <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
+              <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between">
                   <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
                     <Users className="w-4 h-4" />

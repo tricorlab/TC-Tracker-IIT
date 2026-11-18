@@ -289,91 +289,194 @@ export const AttendanceMarkingPage: React.FC = () => {
         {loading ? (
           <TableSkeleton rows={8} columns={5} />
         ) : filteredStaff.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500 uppercase bg-slate-50/50 text-[10px]">
-                  <th className="py-3 px-4 font-semibold">Employee</th>
-                  <th className="py-3 px-4 font-semibold">Role</th>
-                  <th className="py-3 px-4 font-semibold text-center">Status Action</th>
-                  <th className="py-3 px-4 font-semibold text-center">Current Status</th>
-                  <th className="py-3 px-4 font-semibold text-right">Last Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredStaff.map((item) => {
-                  const currentStatus = markedMap[item.userId] || 'Not Marked';
-                  return (
-                    <tr key={item.userId} className="hover:bg-slate-50/60 transition">
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">{item.fullName}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">{item.email}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <StatusBadge status={item.role || 'Staff'} size="sm" />
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Present Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(item.userId, 'Present')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                              currentStatus === 'Present'
-                                ? 'bg-emerald-600 text-white shadow-2xs'
-                                : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
-                            }`}
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Present</span>
-                          </button>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 uppercase bg-slate-50/50 text-[10px]">
+                    <th className="py-3 px-4 font-semibold">Employee</th>
+                    <th className="py-3 px-4 font-semibold">Role</th>
+                    <th className="py-3 px-4 font-semibold text-center">Status Action</th>
+                    <th className="py-3 px-4 font-semibold text-center">Current Status</th>
+                    <th className="py-3 px-4 font-semibold text-right">Last Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredStaff.map((item) => {
+                    const currentStatus = markedMap[item.userId] || 'Not Marked';
+                    return (
+                      <tr key={item.userId} className="hover:bg-slate-50/60 transition">
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-slate-900">{item.fullName}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{item.email}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <StatusBadge status={item.role || 'Staff'} size="sm" />
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Present Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(item.userId, 'Present')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                currentStatus === 'Present'
+                                  ? 'bg-emerald-600 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Present</span>
+                            </button>
 
-                          {/* Absent Toggle */}
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(item.userId, 'Absent')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                              currentStatus === 'Absent'
-                                ? 'bg-rose-600 text-white shadow-2xs'
-                                : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700'
-                            }`}
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Absent</span>
-                          </button>
+                            {/* Absent Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(item.userId, 'Absent')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                currentStatus === 'Absent'
+                                  ? 'bg-rose-600 text-white shadow-2xs'
+                                  : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700'
+                              }`}
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>Absent</span>
+                            </button>
 
-                          {/* Clear / Not Marked Reset */}
-                          <button
-                            type="button"
-                            onClick={() => handleStatusChange(item.userId, 'Not Marked')}
-                            className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
-                              currentStatus === 'Not Marked'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                            }`}
-                            title="Reset to Not Marked"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                          </button>
+                            {/* Clear / Not Marked Reset */}
+                            <button
+                              type="button"
+                              onClick={() => handleStatusChange(item.userId, 'Not Marked')}
+                              className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
+                                currentStatus === 'Not Marked'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                              }`}
+                              title="Reset to Not Marked"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <StatusBadge status={currentStatus} size="sm" />
+                        </td>
+                        <td className="py-3 px-4 text-slate-400 text-right text-[11px] whitespace-nowrap">
+                          {item.updatedAt ? new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredStaff.map((item) => {
+                const currentStatus = markedMap[item.userId] || 'Not Marked';
+                return (
+                  <div
+                    key={item.userId}
+                    className={`p-3.5 transition-colors ${
+                      currentStatus === 'Present'
+                        ? 'bg-emerald-50/25'
+                        : currentStatus === 'Absent'
+                        ? 'bg-rose-50/25'
+                        : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-900 text-sm truncate">
+                          {item.fullName}
                         </div>
-                      </td>
-                      <td className="py-3 px-4 text-center">
+                        <div className="text-[11px] text-slate-400 font-mono truncate">
+                          {item.email}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <StatusBadge status={item.role || 'Staff'} size="sm" />
                         <StatusBadge status={currentStatus} size="sm" />
-                      </td>
-                      <td className="py-3 px-4 text-slate-400 text-right text-[11px] whitespace-nowrap">
-                        {item.updatedAt ? new Date(item.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+
+                    {/* Touch Action Buttons */}
+                    <div className="grid grid-cols-5 gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange(item.userId, 'Present')}
+                        className={`col-span-2 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs ${
+                          currentStatus === 'Present'
+                            ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                            : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200'
+                        }`}
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Present</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange(item.userId, 'Absent')}
+                        className={`col-span-2 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer shadow-2xs ${
+                          currentStatus === 'Absent'
+                            ? 'bg-rose-600 text-white shadow-rose-600/20'
+                            : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-700 border border-slate-200'
+                        }`}
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span>Absent</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange(item.userId, 'Not Marked')}
+                        className={`col-span-1 py-2 rounded-xl text-xs font-medium transition flex items-center justify-center cursor-pointer border ${
+                          currentStatus === 'Not Marked'
+                            ? 'bg-amber-100 text-amber-800 border-amber-200'
+                            : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 border-slate-200'
+                        }`}
+                        title="Reset to Not Marked"
+                        aria-label="Reset status"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <div className="p-12 text-center text-xs text-slate-400">
             {searchQuery ? 'No staff match the search query.' : 'No active staff members found.'}
           </div>
         )}
+      </div>
+
+      {/* Mobile Sticky Floating Save Bar */}
+      <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 px-4 py-2.5 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+            <Check className="w-3 h-3" />
+            {presentCount}
+          </span>
+          <span className="inline-flex items-center gap-1 font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+            <XCircle className="w-3 h-3" />
+            {absentCount}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || loading}
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-bold shadow-md transition active:scale-95 cursor-pointer"
+        >
+          <Save className="w-3.5 h-3.5" />
+          <span>{saving ? 'Saving...' : 'Save Records'}</span>
+        </button>
       </div>
     </div>
   );

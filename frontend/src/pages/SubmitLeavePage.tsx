@@ -411,7 +411,7 @@ export const SubmitLeavePage: React.FC = () => {
         <button
           type="submit"
           disabled={submitting || calcLoading || !startDate || !endDate}
-          className="w-full py-2.5 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+          className="w-full h-11 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-95"
         >
           {submitting ? (
             <span>Submitting Request...</span>

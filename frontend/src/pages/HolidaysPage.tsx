@@ -535,9 +535,9 @@ export const HolidaysPage: React.FC = () => {
       </div>
 
       {/* 2. Executive Holiday KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 no-print">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 no-print">
         {/* Card 1: Total Holidays */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 block uppercase tracking-wider">
               Total Holidays
@@ -555,7 +555,7 @@ export const HolidaysPage: React.FC = () => {
         </div>
 
         {/* Card 2: Next Upcoming Holiday Banner */}
-        <div className="bg-gradient-to-br from-indigo-50 to-blue-50/60 rounded-2xl p-4 sm:p-5 border border-indigo-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-gradient-to-br from-indigo-50 to-blue-50/60 rounded-2xl p-3.5 sm:p-5 border border-indigo-200/80 shadow-xs flex items-center justify-between">
           <div className="min-w-0 pr-2">
             <span className="text-[11px] font-bold text-indigo-700 block uppercase tracking-wider">
               Next Upcoming Holiday
@@ -583,7 +583,7 @@ export const HolidaysPage: React.FC = () => {
         </div>
 
         {/* Card 3: Long Weekends */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 block uppercase tracking-wider">
               Long Weekends
@@ -601,7 +601,7 @@ export const HolidaysPage: React.FC = () => {
         </div>
 
         {/* Card 4: Remaining Holidays */}
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-2xl p-3.5 sm:p-5 border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-500 block uppercase tracking-wider">
               Remaining This Year

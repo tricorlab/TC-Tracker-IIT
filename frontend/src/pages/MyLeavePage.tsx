@@ -567,7 +567,9 @@ export const MyLeavePage: React.FC = () => {
 
             <div className="overflow-x-auto">
               {filteredRequests.length > 0 ? (
-                <table className="w-full text-left border-collapse text-xs">
+                <>
+                  <div className="hidden md:block">
+                    <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-slate-100 text-slate-400 uppercase bg-slate-50/30 text-[10px]">
                       <th className="py-3 px-4 font-semibold">Date Range</th>
@@ -639,6 +641,81 @@ export const MyLeavePage: React.FC = () => {
                     })}
                   </tbody>
                 </table>
+                </div>
+
+                {/* Mobile Card List View */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {filteredRequests.map((req) => {
+                    const isWithdrawn = req.Status === 'Withdrawn' || req.Status === 'Cancelled';
+                    return (
+                      <div
+                        key={req.LeaveRequestID}
+                        className={`p-4 space-y-2.5 ${isWithdrawn ? 'opacity-65 bg-slate-50/50' : 'bg-white'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className={`font-mono text-xs font-bold text-slate-900 block ${isWithdrawn ? 'line-through text-slate-400' : ''}`}>
+                              {req.StartDate} &rarr; {req.EndDate}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              {req.LeaveType.startsWith('Special Leave') ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                  <Award className="w-3 h-3 text-purple-600" />
+                                  <span>{req.LeaveType}</span>
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  {req.LeaveType}
+                                </span>
+                              )}
+                              <span className="font-bold text-xs text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                                {req.CalculatedDays} {req.CalculatedDays === 1 ? 'day' : 'days'}
+                              </span>
+                              {req.Remarks && req.Remarks.includes('(Exempt from Regular Balance)') && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                                  Exempt
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex flex-col items-end gap-1">
+                            <StatusBadge status={req.Status || 'Recorded'} size="sm" />
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {req.LeaveRequestID}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Reason */}
+                        {req.Reason && (
+                          <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <span className="text-slate-400 font-normal">Reason: </span>
+                            {req.Reason}
+                          </p>
+                        )}
+
+                        {/* Mobile Actions / Submitted Date */}
+                        <div className="flex items-center justify-between pt-1 text-xs">
+                          <span className="text-[10px] text-slate-400">
+                            Submitted: {req.SubmittedAt ? new Date(req.SubmittedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
+                          </span>
+                          {canWithdraw(req) && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWithdrawModal(req)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition cursor-pointer active:scale-95"
+                            >
+                              <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Withdraw</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
               ) : (
                 <div className="p-12 text-center text-xs text-slate-400 space-y-2">
                   <FileText className="w-8 h-8 text-slate-300 mx-auto" />

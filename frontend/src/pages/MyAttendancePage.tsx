@@ -221,55 +221,108 @@ export const MyAttendancePage: React.FC = () => {
         {loading ? (
           <TableSkeleton rows={10} columns={4} />
         ) : summary && summary.records.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500 uppercase bg-slate-50/50 text-[10px]">
-                  <th className="py-3 px-4 font-semibold">Date</th>
-                  <th className="py-3 px-4 font-semibold">Day of Week</th>
-                  <th className="py-3 px-4 font-semibold">Attendance Status</th>
-                  <th className="py-3 px-4 font-semibold text-right">Classification / Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {summary.records.map((rec) => {
-                  const isWeekendOrHoliday = rec.isSunday || rec.isHoliday;
-                  return (
-                    <tr
-                      key={rec.date}
-                      className={`hover:bg-slate-50/60 transition ${
-                        rec.isSunday ? 'bg-slate-50/40' : rec.isHoliday ? 'bg-blue-50/20' : ''
-                      }`}
-                    >
-                      <td className="py-3 px-4 font-mono font-medium text-slate-800">
-                        {rec.date}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600">
-                        {rec.dayOfWeek}
-                      </td>
-                      <td className="py-3 px-4">
-                        {getStatusBadge(rec)}
-                      </td>
-                      <td className="py-3 px-4 text-slate-500 text-right text-[11px]">
-                        {rec.isHoliday && (
-                          <span className="font-semibold text-blue-700">
-                            {rec.holidayName} (Institute Holiday)
-                          </span>
-                        )}
-                        {rec.isSunday && 'Weekly Off (Sunday)'}
-                        {!isWeekendOrHoliday && rec.status === 'Not Marked' && (
-                          <span className="text-slate-500">Not Marked</span>
-                        )}
-                        {!isWeekendOrHoliday && rec.status !== 'Not Marked' && (
-                          <span className="text-slate-400">Regular working day</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 uppercase bg-slate-50/50 text-[10px]">
+                    <th className="py-3 px-4 font-semibold">Date</th>
+                    <th className="py-3 px-4 font-semibold">Day of Week</th>
+                    <th className="py-3 px-4 font-semibold">Attendance Status</th>
+                    <th className="py-3 px-4 font-semibold text-right">Classification / Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {summary.records.map((rec) => {
+                    const isWeekendOrHoliday = rec.isSunday || rec.isHoliday;
+                    return (
+                      <tr
+                        key={rec.date}
+                        className={`hover:bg-slate-50/60 transition ${
+                          rec.isSunday ? 'bg-slate-50/40' : rec.isHoliday ? 'bg-blue-50/20' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-4 font-mono font-medium text-slate-800">
+                          {rec.date}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {rec.dayOfWeek}
+                        </td>
+                        <td className="py-3 px-4">
+                          {getStatusBadge(rec)}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500 text-right text-[11px]">
+                          {rec.isHoliday && (
+                            <span className="font-semibold text-blue-700">
+                              {rec.holidayName} (Institute Holiday)
+                            </span>
+                          )}
+                          {rec.isSunday && 'Weekly Off (Sunday)'}
+                          {!isWeekendOrHoliday && rec.status === 'Not Marked' && (
+                            <span className="text-slate-500">Not Marked</span>
+                          )}
+                          {!isWeekendOrHoliday && rec.status !== 'Not Marked' && (
+                            <span className="text-slate-400">Regular working day</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {summary.records.map((rec) => {
+                const isWeekendOrHoliday = rec.isSunday || rec.isHoliday;
+                const dayNum = parseInt(rec.date.slice(8, 10), 10);
+                return (
+                  <div
+                    key={rec.date}
+                    className={`p-3.5 flex items-center justify-between gap-3 ${
+                      rec.isSunday
+                        ? 'bg-slate-50/50'
+                        : rec.isHoliday
+                        ? 'bg-blue-50/25'
+                        : rec.status === 'Present'
+                        ? 'bg-emerald-50/15'
+                        : rec.status === 'Absent'
+                        ? 'bg-rose-50/15'
+                        : 'bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200/80 flex flex-col items-center justify-center shrink-0">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 leading-none">
+                          {rec.dayOfWeek.slice(0, 3)}
+                        </span>
+                        <span className="text-sm font-extrabold text-slate-800 leading-tight">
+                          {dayNum}
+                        </span>
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-mono font-bold text-slate-900 block truncate">
+                          {rec.date}
+                        </span>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {rec.isHoliday && `${rec.holidayName} (Holiday)`}
+                          {rec.isSunday && 'Weekly Off'}
+                          {!isWeekendOrHoliday && rec.status === 'Not Marked' && 'Pending verification'}
+                          {!isWeekendOrHoliday && rec.status !== 'Not Marked' && 'Working Day'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {getStatusBadge(rec)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         ) : (
           <div className="p-12 text-center text-xs text-slate-400">
             No attendance records available for this period.

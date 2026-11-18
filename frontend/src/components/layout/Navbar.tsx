@@ -119,9 +119,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarOpen }) 
         </div>
 
         {/* Right: Notification Bell / User Info / Role Badge / Logout */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Notification Bell Menu */}
               <NotificationMenu />
 
@@ -136,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarOpen }) 
               </div>
 
               {/* Role Badge */}
-              <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-[#dce7f5] text-[#1c3a64] border border-[#c4d7ed] tracking-wide">
+              <span className="px-2 sm:px-3 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-[#dce7f5] text-[#1c3a64] border border-[#c4d7ed] tracking-wide shrink-0">
                 {user.role}
               </span>
 
@@ -144,8 +144,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarOpen }) 
               <button
                 type="button"
                 onClick={handleLogout}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/15 bg-white/10 hover:bg-rose-500/20 hover:text-rose-200 hover:border-rose-400 text-slate-200 text-xs font-medium transition cursor-pointer"
+                className="flex items-center justify-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-xl border border-white/15 bg-white/10 hover:bg-rose-500/20 hover:text-rose-200 hover:border-rose-400 text-slate-200 text-xs font-medium transition cursor-pointer active:scale-95 shrink-0"
                 title="Log Out"
+                aria-label="Log out"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Logout</span>

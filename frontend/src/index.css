@@ -6,6 +6,8 @@
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 
 body {
@@ -13,6 +15,8 @@ body {
   min-height: 100vh;
   background-color: #f8fafc;
   color: #0f172a;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Bespoke Animations & Micro-Interactions */
