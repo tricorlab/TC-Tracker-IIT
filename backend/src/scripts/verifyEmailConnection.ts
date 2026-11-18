@@ -13,8 +13,7 @@ async function main() {
   console.log('TC Tracker — Email Configuration & Connection Test');
   console.log('====================================================');
 
-  const resendKey = process.env.RESEND_API_KEY?.trim();
-  const brevoKey = process.env.BREVO_API_KEY?.trim();
+  const appsScriptUrl = (process.env.APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL)?.trim();
   const gmailUser = process.env.GMAIL_USER?.trim();
   const gmailPass = (process.env.GMAIL_APP_PASSWORD || process.env.GMAIL_PASS)?.trim();
   const adminGmail = (process.env.ADMIN_GMAIL || process.env.ADMIN_EMAIL)?.trim();
@@ -36,8 +35,7 @@ async function main() {
   };
 
   console.log(`Active Provider    : ${provider ? provider.toUpperCase() : '<NONE>'}`);
-  console.log(`RESEND_API_KEY     : ${maskSecret(resendKey)}`);
-  console.log(`BREVO_API_KEY      : ${maskSecret(brevoKey)}`);
+  console.log(`APPS_SCRIPT_URL    : ${appsScriptUrl ? `${appsScriptUrl.substring(0, 45)}...` : '<NOT SET>'}`);
   console.log(`GMAIL_USER         : ${maskEmail(gmailUser)}`);
   console.log(`GMAIL_APP_PASSWORD : ${gmailPass ? `CONFIGURED (${gmailPass.length} chars)` : '<NOT SET>'}`);
   console.log(`ADMIN_GMAIL        : ${maskEmail(adminGmail)}`);
@@ -45,7 +43,7 @@ async function main() {
   console.log('----------------------------------------------------');
 
   if (!emailService.isEmailConfigured()) {
-    console.error('ERROR: Email is not fully configured. Please set RESEND_API_KEY (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env');
+    console.error('ERROR: Email is not fully configured. Please set APPS_SCRIPT_URL (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in backend/.env');
     process.exit(1);
   }
 

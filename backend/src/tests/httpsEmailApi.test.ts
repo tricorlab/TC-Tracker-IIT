@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { emailService } from '../services/email.service.js';
 
-describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---', () => {
+describe('--- [FIRST-PARTY EMAIL TEST SUITE] Google Apps Script & SMTP Dispatch ---', () => {
   const origEnv = { ...process.env };
   let originalFetch: typeof globalThis.fetch;
 
@@ -17,53 +17,38 @@ describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---',
     process.env = { ...origEnv };
   });
 
-  it('1. isEmailConfigured recognizes RESEND_API_KEY as a valid email configuration', () => {
+  it('1. isEmailConfigured recognizes APPS_SCRIPT_URL as a valid first-party email configuration', () => {
     delete process.env.GMAIL_USER;
     delete process.env.GMAIL_APP_PASSWORD;
     delete process.env.SMTP_HOST;
     delete process.env.GMAIL_REFRESH_TOKEN;
-    delete process.env.BREVO_API_KEY;
 
-    process.env.RESEND_API_KEY = 're_test_123456789';
-
-    assert.strictEqual(emailService.isEmailConfigured(), true);
-    assert.strictEqual(emailService.getActiveProvider(), 'resend');
-  });
-
-  it('2. isEmailConfigured recognizes BREVO_API_KEY as a valid email configuration', () => {
-    delete process.env.GMAIL_USER;
-    delete process.env.GMAIL_APP_PASSWORD;
-    delete process.env.SMTP_HOST;
-    delete process.env.GMAIL_REFRESH_TOKEN;
-    delete process.env.RESEND_API_KEY;
-
-    process.env.BREVO_API_KEY = 'xkeysib-test-123456';
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_mock_deployment/exec';
 
     assert.strictEqual(emailService.isEmailConfigured(), true);
-    assert.strictEqual(emailService.getActiveProvider(), 'brevo');
+    assert.strictEqual(emailService.getActiveProvider(), 'google_script');
   });
 
-  it('3. getActiveProvider prioritizes HTTPS Resend over SMTP to bypass cloud port blocking', () => {
+  it('2. getActiveProvider prioritizes Google Apps Script over SMTP for cloud compatibility', () => {
     process.env.GMAIL_USER = 'sender@gmail.com';
     process.env.GMAIL_APP_PASSWORD = 'app-password';
-    process.env.RESEND_API_KEY = 're_live_key_999';
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_live/exec';
 
-    // Even if GMAIL_USER/GMAIL_APP_PASSWORD are set, RESEND_API_KEY takes priority
-    assert.strictEqual(emailService.getActiveProvider(), 'resend');
+    assert.strictEqual(emailService.getActiveProvider(), 'google_script');
   });
 
-  it('4. getActiveProvider respects explicit EMAIL_PROVIDER override', () => {
+  it('3. getActiveProvider respects explicit EMAIL_PROVIDER override to smtp', () => {
     process.env.GMAIL_USER = 'sender@gmail.com';
     process.env.GMAIL_APP_PASSWORD = 'app-password';
-    process.env.RESEND_API_KEY = 're_live_key_999';
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_live/exec';
     process.env.EMAIL_PROVIDER = 'smtp';
 
     assert.strictEqual(emailService.getActiveProvider(), 'smtp');
   });
 
-  it('5. sendResendMail correctly dispatches POST to api.resend.com over HTTPS', async () => {
-    process.env.RESEND_API_KEY = 're_mock_test_key';
-    process.env.EMAIL_FROM = 'TC Tracker <test@domain.org>';
+  it('4. sendGoogleAppsScriptMail correctly dispatches POST to Apps Script URL over HTTPS', async () => {
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_mock_key/exec';
+    process.env.GMAIL_USER = 'tricorlab@gmail.com';
 
     let capturedUrl = '';
     let capturedOptions: any = null;
@@ -74,11 +59,12 @@ describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---',
       return {
         ok: true,
         status: 200,
-        json: async () => ({ id: 'resend_msg_12345' }),
+        text: async () => JSON.stringify({ success: true }),
       } as any;
     }) as any;
 
-    const result = await emailService.sendResendMail({
+    const result = await emailService.sendGoogleAppsScriptMail({
+      fromName: 'TC Tracker Portal',
       to: 'employee@institution.edu',
       subject: 'TC Tracker Credentials',
       text: 'Temporary Password: secret',
@@ -86,32 +72,31 @@ describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---',
     });
 
     assert.strictEqual(result.success, true);
-    assert.strictEqual(capturedUrl, 'https://api.resend.com/emails');
+    assert.strictEqual(capturedUrl, 'https://script.google.com/macros/s/AKfycbx_mock_key/exec');
     assert.strictEqual(capturedOptions.method, 'POST');
-    assert.strictEqual(capturedOptions.headers['Authorization'], 'Bearer re_mock_test_key');
 
     const body = JSON.parse(capturedOptions.body);
-    assert.strictEqual(body.from, 'TC Tracker <test@domain.org>');
-    assert.deepStrictEqual(body.to, ['employee@institution.edu']);
+    assert.strictEqual(body.fromName, 'TC Tracker Portal');
+    assert.strictEqual(body.to, 'employee@institution.edu');
     assert.strictEqual(body.subject, 'TC Tracker Credentials');
+    assert.strictEqual(body.replyTo, 'tricorlab@gmail.com');
   });
 
-  it('6. sendResendMail captures and returns descriptive error when API returns 4xx/5xx', async () => {
-    process.env.RESEND_API_KEY = 're_invalid_key';
+  it('5. sendGoogleAppsScriptMail captures and returns descriptive error when script fails', async () => {
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_invalid/exec';
 
     globalThis.fetch = (async () => {
       return {
-        ok: false,
-        status: 422,
-        statusText: 'Unprocessable Entity',
-        json: async () => ({
-          message: 'The from address does not belong to any verified domain.',
-          name: 'validation_error',
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({
+          success: false,
+          error: 'Missing required fields: to or subject',
         }),
       } as any;
     }) as any;
 
-    const result = await emailService.sendResendMail({
+    const result = await emailService.sendGoogleAppsScriptMail({
       to: 'employee@institution.edu',
       subject: 'TC Tracker Test',
       text: 'Test',
@@ -119,120 +104,66 @@ describe('--- [HTTPS EMAIL REST API TEST SUITE] Cloud-Ready Email Dispatch ---',
     });
 
     assert.strictEqual(result.success, false);
-    assert.ok(result.errorMessage?.includes('Resend API Error (422)'));
-    assert.ok(result.errorMessage?.includes('verified domain'));
+    assert.ok(result.errorMessage?.includes('Google Apps Script Error: Missing required fields'));
   });
 
-  it('7. sendBrevoMail dispatches POST to api.brevo.com over HTTPS', async () => {
-    process.env.BREVO_API_KEY = 'xkeysib-mock-test';
-    process.env.BREVO_FROM = 'admin@institution.edu';
+  it('6. sendGoogleAppsScriptMail captures network failures gracefully', async () => {
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_offline/exec';
 
-    let capturedUrl = '';
-    let capturedOptions: any = null;
-
-    globalThis.fetch = (async (url: any, opts: any) => {
-      capturedUrl = url.toString();
-      capturedOptions = opts;
-      return {
-        ok: true,
-        status: 201,
-        json: async () => ({ messageId: '<brevo-12345@smtp-relay.mailin.fr>' }),
-      } as any;
+    globalThis.fetch = (async () => {
+      throw new Error('fetch failed: ENOTFOUND script.google.com');
     }) as any;
 
-    const result = await emailService.sendBrevoMail({
-      fromName: 'TC Tracker Portal',
+    const result = await emailService.sendGoogleAppsScriptMail({
       to: 'employee@institution.edu',
-      subject: 'Leave Approved',
-      text: 'Your leave has been approved',
-      html: '<p>Your leave has been approved</p>',
+      subject: 'TC Tracker Test',
+      text: 'Test',
+      html: '<p>Test</p>',
     });
 
-    assert.strictEqual(result.success, true);
-    assert.strictEqual(capturedUrl, 'https://api.brevo.com/v3/smtp/email');
-    assert.strictEqual(capturedOptions.headers['api-key'], 'xkeysib-mock-test');
-
-    const body = JSON.parse(capturedOptions.body);
-    assert.strictEqual(body.sender.name, 'TC Tracker Portal');
-    assert.strictEqual(body.sender.email, 'admin@institution.edu');
-    assert.deepStrictEqual(body.to, [{ email: 'employee@institution.edu' }]);
+    assert.strictEqual(result.success, false);
+    assert.ok(result.errorMessage?.includes('Google Apps Script Network Error'));
   });
 
-  it('8. verifyConnection reports Resend API (HTTPS) and port 443 when key is valid', async () => {
+  it('7. verifyConnection reports Google Apps Script (HTTPS) and port 443 when script is reachable', async () => {
     delete process.env.GMAIL_USER;
     delete process.env.GMAIL_APP_PASSWORD;
-    process.env.RESEND_API_KEY = 're_test_key_valid';
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_valid/exec';
 
     globalThis.fetch = (async (url: any) => {
-      assert.strictEqual(url.toString(), 'https://api.resend.com/api-keys');
+      assert.strictEqual(url.toString(), 'https://script.google.com/macros/s/AKfycbx_valid/exec');
       return {
         ok: true,
         status: 200,
-        json: async () => ({ data: [] }),
+        json: async () => ({ status: 'ok', service: 'TC Tracker Email Webhook' }),
       } as any;
     }) as any;
 
     const diag = await emailService.verifyConnection();
 
     assert.strictEqual(diag.configured, true);
-    assert.strictEqual(diag.authMethod, 'Resend API (HTTPS)');
+    assert.strictEqual(diag.authMethod, 'Google Apps Script (HTTPS)');
     assert.strictEqual(diag.verified, true);
     assert.strictEqual(diag.portUsed, 443);
   });
 
-  it('9. sendResendMail falls back to onboarding@resend.dev when EMAIL_FROM is a public gmail.com address', async () => {
-    process.env.RESEND_API_KEY = 're_test_key_valid';
-    process.env.GMAIL_USER = 'tricorlab@gmail.com';
-    process.env.EMAIL_FROM = 'tricorlab@gmail.com';
-
-    let capturedOptions: any = null;
-    globalThis.fetch = (async (_url: any, opts: any) => {
-      capturedOptions = opts;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ id: 'resend_ok_1' }),
-      } as any;
-    }) as any;
-
-    const result = await emailService.sendResendMail({
-      to: 'staff@domain.com',
-      subject: 'Test Subject',
-      text: 'Body',
-      html: '<p>Body</p>',
-    });
-
-    assert.strictEqual(result.success, true);
-    const body = JSON.parse(capturedOptions.body);
-    // Crucial: Must NOT send from @gmail.com to prevent Resend 403 error
-    assert.strictEqual(body.from, 'TC Tracker <onboarding@resend.dev>');
-    // Crucial: reply_to receives the admin's Gmail address
-    assert.strictEqual(body.reply_to, 'tricorlab@gmail.com');
-  });
-
-  it('10. sendResendMail formats actionable message when 403 unverified domain occurs', async () => {
-    process.env.RESEND_API_KEY = 're_test_key_valid';
+  it('8. verifyConnection reports troubleshooting guidance when script returns non-200', async () => {
+    delete process.env.GMAIL_USER;
+    delete process.env.GMAIL_APP_PASSWORD;
+    process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx_unauthorized/exec';
 
     globalThis.fetch = (async () => {
       return {
         ok: false,
-        status: 403,
-        statusText: 'Forbidden',
-        json: async () => ({
-          message: 'The gmail.com domain is not verified. Please, add and verify your domain on https://resend.com/domains',
-        }),
+        status: 401,
       } as any;
     }) as any;
 
-    const result = await emailService.sendResendMail({
-      to: 'staff@domain.com',
-      subject: 'Test',
-      text: 'Test',
-      html: '<p>Test</p>',
-    });
+    const diag = await emailService.verifyConnection();
 
-    assert.strictEqual(result.success, false);
-    assert.ok(result.errorMessage?.includes('Resend Domain Notice (403)'));
-    assert.ok(result.errorMessage?.includes('onboarding@resend.dev'));
+    assert.strictEqual(diag.configured, true);
+    assert.strictEqual(diag.verified, false);
+    assert.ok(diag.error?.includes('HTTP 401'));
+    assert.ok(diag.troubleshooting?.includes('Execute as: Me'));
   });
 });

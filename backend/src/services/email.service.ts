@@ -143,7 +143,7 @@ export class EmailService {
   }
 
   /**
-   * Check if live email credentials (Resend API, Brevo API, Gmail App Password, SMTP, or Gmail API OAuth2) are configured.
+   * Check if live email credentials (Google Apps Script, Gmail App Password, SMTP, or Gmail API OAuth2) are configured.
    */
   public isEmailConfigured(): boolean {
     if (this.customDispatcher) {
@@ -151,11 +151,11 @@ export class EmailService {
     }
     this.reloadEnv();
 
-    // 0. Check HTTP REST Email APIs (Port 443 - HTTPS, firewall-proof on cloud platforms like Render)
-    if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) {
+    // 0. Check Google Apps Script Web App (Port 443 - HTTPS, zero third-party services)
+    if (process.env.APPS_SCRIPT_URL && process.env.APPS_SCRIPT_URL.trim()) {
       return true;
     }
-    if (process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim()) {
+    if (process.env.GOOGLE_APPS_SCRIPT_URL && process.env.GOOGLE_APPS_SCRIPT_URL.trim()) {
       return true;
     }
 
@@ -337,64 +337,62 @@ export class EmailService {
   }
 
   /**
-   * Helper to send email via Resend REST API (HTTPS port 443).
-   * Bypasses cloud hosting SMTP firewall restrictions on Render, AWS, and DigitalOcean.
+   * Helper to send email via Google Apps Script Web App (HTTPS port 443).
+   * Runs directly inside the existing Google Sheet without third-party services.
    */
-  public async sendResendMail(options: {
+  public async sendGoogleAppsScriptMail(options: {
     fromName?: string;
-    fromEmail?: string;
     to: string;
     subject: string;
     text: string;
     html: string;
     replyTo?: string;
   }): Promise<{ success: boolean; errorMessage?: string }> {
-    const apiKey = process.env.RESEND_API_KEY?.trim();
-    if (!apiKey) {
-      return { success: false, errorMessage: 'RESEND_API_KEY is not configured in environment.' };
+    const scriptUrl = (process.env.APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL)?.trim();
+    if (!scriptUrl) {
+      return { success: false, errorMessage: 'APPS_SCRIPT_URL is not configured in environment.' };
     }
 
-    const defaultFrom = 'TC Tracker <onboarding@resend.dev>';
-    const rawConfiguredFrom = (process.env.RESEND_FROM || process.env.EMAIL_FROM || '').trim();
-
-    // Resend requires a domain you own. Public webmail domains (@gmail.com, @yahoo.com, etc.)
-    // cannot be verified on Resend and will trigger a 403 error.
-    const isPublicWebmail = /@(gmail|googlemail|yahoo|outlook|hotmail|live|icloud)\.com/i.test(rawConfiguredFrom);
-    const from = (rawConfiguredFrom && !isPublicWebmail) ? rawConfiguredFrom : defaultFrom;
-
-    // Direct any recipient replies back to the administrator's email or GMAIL_USER
+    const secret = process.env.APPS_SCRIPT_SECRET?.trim();
     const replyTo = options.replyTo || process.env.ADMIN_GMAIL || process.env.GMAIL_USER;
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      const response = await fetch(scriptUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({
-          from,
-          to: [options.to],
+          to: options.to,
           subject: options.subject,
           text: options.text,
           html: options.html,
-          ...(replyTo ? { reply_to: replyTo } : {}),
+          fromName: options.fromName || 'TC Tracker',
+          replyTo: replyTo || undefined,
+          secret: secret || undefined,
         }),
+        redirect: 'follow',
       });
 
-      const data = (await response.json().catch(() => ({}))) as any;
+      const rawText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        // Not JSON
+      }
 
-      if (!response.ok) {
-        const errorMsg = data?.message || data?.error || `HTTP ${response.status} ${response.statusText}`;
-        if (response.status === 403 && /domain is not verified/i.test(errorMsg)) {
-          return {
-            success: false,
-            errorMessage: `Resend Domain Notice (403): ${errorMsg}. Note: Resend's free test domain (onboarding@resend.dev) only allows sending to the email address registered with your Resend account. To send emails to all employees, add & verify a domain at https://resend.com/domains, or use Brevo (BREVO_API_KEY).`,
-          };
-        }
+      if (data && data.success === false) {
         return {
           success: false,
-          errorMessage: `Resend API Error (${response.status}): ${errorMsg}`,
+          errorMessage: `Google Apps Script Error: ${data.error || data.message || 'Script reported dispatch failure'}`,
+        };
+      }
+
+      if (!response.ok) {
+        return {
+          success: false,
+          errorMessage: `Google Apps Script HTTP Error (${response.status}): ${data?.message || rawText.slice(0, 150)}`,
         };
       }
 
@@ -402,69 +400,7 @@ export class EmailService {
     } catch (err: any) {
       return {
         success: false,
-        errorMessage: `Resend API Network Error: ${err?.message || 'Failed to reach api.resend.com'}`,
-      };
-    }
-  }
-
-  /**
-   * Helper to send email via Brevo (Sendinblue) REST API (HTTPS port 443).
-   */
-  public async sendBrevoMail(options: {
-    fromName?: string;
-    fromEmail?: string;
-    to: string;
-    subject: string;
-    text: string;
-    html: string;
-    replyTo?: string;
-  }): Promise<{ success: boolean; errorMessage?: string }> {
-    const apiKey = process.env.BREVO_API_KEY?.trim();
-    if (!apiKey) {
-      return { success: false, errorMessage: 'BREVO_API_KEY is not configured in environment.' };
-    }
-
-    const senderEmail =
-      process.env.BREVO_FROM ||
-      process.env.EMAIL_FROM ||
-      process.env.GMAIL_USER ||
-      options.fromEmail ||
-      'notifications@tc-tracker.local';
-    const senderName = options.fromName || 'TC Tracker';
-
-    try {
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'api-key': apiKey,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          sender: { name: senderName, email: senderEmail },
-          to: [{ email: options.to }],
-          subject: options.subject,
-          htmlContent: options.html,
-          textContent: options.text,
-          ...(options.replyTo ? { replyTo: { email: options.replyTo } } : {}),
-        }),
-      });
-
-      const data = (await response.json().catch(() => ({}))) as any;
-
-      if (!response.ok) {
-        const errorMsg = data?.message || `HTTP ${response.status} ${response.statusText}`;
-        return {
-          success: false,
-          errorMessage: `Brevo API Error (${response.status}): ${errorMsg}`,
-        };
-      }
-
-      return { success: true };
-    } catch (err: any) {
-      return {
-        success: false,
-        errorMessage: `Brevo API Network Error: ${err?.message || 'Failed to reach api.brevo.com'}`,
+        errorMessage: `Google Apps Script Network Error: ${err?.message || 'Failed to reach Apps Script Web App'}`,
       };
     }
   }
@@ -472,21 +408,20 @@ export class EmailService {
   /**
    * Determine the active email dispatch mechanism.
    * Priority:
-   * 1. Explicit EMAIL_PROVIDER ('resend' | 'brevo' | 'gmail_api' | 'smtp')
-   * 2. Resend REST API (HTTPS port 443 - zero firewall blocking on cloud hosts)
-   * 3. Brevo REST API (HTTPS port 443)
-   * 4. Gmail API OAuth2 (HTTPS port 443)
-   * 5. Nodemailer SMTP (Gmail App Password or Custom SMTP)
+   * 1. Explicit EMAIL_PROVIDER ('google_script' | 'gmail_api' | 'smtp')
+   * 2. Google Apps Script Web App (HTTPS port 443 - first party, runs in existing Google Sheet)
+   * 3. Gmail API OAuth2 (HTTPS port 443)
+   * 4. Nodemailer SMTP (Gmail App Password or Custom SMTP)
    */
-  public getActiveProvider(): 'resend' | 'brevo' | 'gmail_api' | 'smtp' | null {
+  public getActiveProvider(): 'google_script' | 'gmail_api' | 'smtp' | null {
     const explicit = process.env.EMAIL_PROVIDER?.toLowerCase().trim();
-    if (explicit === 'resend' && process.env.RESEND_API_KEY) return 'resend';
-    if (explicit === 'brevo' && process.env.BREVO_API_KEY) return 'brevo';
+    if (explicit === 'google_script' || explicit === 'apps_script' || explicit === 'google_apps_script') {
+      if (process.env.APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL) return 'google_script';
+    }
     if (explicit === 'gmail_api' && this.getGmailClient()) return 'gmail_api';
     if (explicit === 'smtp' && this.getNodemailerTransporter()) return 'smtp';
 
-    if (process.env.RESEND_API_KEY?.trim()) return 'resend';
-    if (process.env.BREVO_API_KEY?.trim()) return 'brevo';
+    if (process.env.APPS_SCRIPT_URL?.trim() || process.env.GOOGLE_APPS_SCRIPT_URL?.trim()) return 'google_script';
     if (this.getGmailClient()) return 'gmail_api';
     if (this.getNodemailerTransporter()) return 'smtp';
 
@@ -495,7 +430,7 @@ export class EmailService {
 
   /**
    * Unified dispatcher executing the active email transport.
-   * Handles custom testing dispatchers, mock test environments, Resend, Brevo, Gmail API, and SMTP.
+   * Handles custom testing dispatchers, mock test environments, Google Apps Script, Gmail API, and SMTP.
    */
   public async sendDirectEmail(options: {
     to: string;
@@ -529,16 +464,12 @@ export class EmailService {
     if (!provider) {
       return {
         success: false,
-        errorMessage: 'Email service credentials not configured. Please set RESEND_API_KEY (or GMAIL_USER and GMAIL_APP_PASSWORD) in environment to send live emails.',
+        errorMessage: 'Email service credentials not configured. Please set APPS_SCRIPT_URL (or GMAIL_USER and GMAIL_APP_PASSWORD) in environment to send live emails.',
       };
     }
 
-    if (provider === 'resend') {
-      return this.sendResendMail(options);
-    }
-
-    if (provider === 'brevo') {
-      return this.sendBrevoMail(options);
+    if (provider === 'google_script') {
+      return this.sendGoogleAppsScriptMail(options);
     }
 
     if (provider === 'gmail_api') {
@@ -887,7 +818,6 @@ Office of Administration
     const htmlBody = this.generateHtmlEmail(payload);
 
     const fromAddress =
-      process.env.RESEND_FROM ||
       process.env.EMAIL_FROM ||
       process.env.GMAIL_USER ||
       'notifications@tc-tracker.local';
@@ -1718,7 +1648,7 @@ IMPORTANT:
     configured: boolean;
     gmailUser?: string;
     hasAppPassword: boolean;
-    authMethod: 'Resend API (HTTPS)' | 'Brevo API (HTTPS)' | 'Gmail App Password (SMTP)' | 'Custom SMTP' | 'Gmail OAuth2' | 'None';
+    authMethod: 'Google Apps Script (HTTPS)' | 'Gmail App Password (SMTP)' | 'Custom SMTP' | 'Gmail OAuth2' | 'None';
     verified: boolean;
     portUsed?: number;
     error?: string;
@@ -1739,88 +1669,42 @@ IMPORTANT:
         authMethod: 'None',
         verified: false,
         error: 'Email service credentials not configured.',
-        troubleshooting: 'Please set RESEND_API_KEY (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in your hosting environment variables.',
+        troubleshooting: 'Please set APPS_SCRIPT_URL (recommended for cloud hosting) or GMAIL_USER and GMAIL_APP_PASSWORD in your hosting environment variables.',
       };
     }
 
-    if (provider === 'resend') {
-      const apiKey = process.env.RESEND_API_KEY?.trim() || '';
+    if (provider === 'google_script') {
+      const scriptUrl = (process.env.APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL)?.trim() || '';
       try {
-        const res = await fetch('https://api.resend.com/api-keys', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${apiKey}` },
-        });
+        const res = await fetch(scriptUrl, { method: 'GET', redirect: 'follow' });
         if (res.ok) {
           return {
             configured: true,
             hasAppPassword: false,
-            authMethod: 'Resend API (HTTPS)',
+            authMethod: 'Google Apps Script (HTTPS)',
             verified: true,
             portUsed: 443,
           };
         } else {
-          const body = (await res.json().catch(() => ({}))) as any;
-          const errMsg = body?.message || `HTTP ${res.status}`;
           return {
             configured: true,
             hasAppPassword: false,
-            authMethod: 'Resend API (HTTPS)',
+            authMethod: 'Google Apps Script (HTTPS)',
             verified: false,
             portUsed: 443,
-            error: `Resend API authentication failed: ${errMsg}`,
-            troubleshooting: 'Please verify that your RESEND_API_KEY is correct in your environment variables.',
+            error: `Google Apps Script returned HTTP ${res.status}`,
+            troubleshooting: 'Please verify that your Google Apps Script Web App is deployed with "Execute as: Me" and "Who has access: Anyone".',
           };
         }
       } catch (err: any) {
         return {
           configured: true,
           hasAppPassword: false,
-          authMethod: 'Resend API (HTTPS)',
+          authMethod: 'Google Apps Script (HTTPS)',
           verified: false,
           portUsed: 443,
-          error: `Resend connection failed: ${err.message}`,
-          troubleshooting: 'Ensure outbound HTTPS port 443 traffic to api.resend.com is permitted.',
-        };
-      }
-    }
-
-    if (provider === 'brevo') {
-      const apiKey = process.env.BREVO_API_KEY?.trim() || '';
-      try {
-        const res = await fetch('https://api.brevo.com/v3/account', {
-          method: 'GET',
-          headers: { 'api-key': apiKey },
-        });
-        if (res.ok) {
-          return {
-            configured: true,
-            hasAppPassword: false,
-            authMethod: 'Brevo API (HTTPS)',
-            verified: true,
-            portUsed: 443,
-          };
-        } else {
-          const body = (await res.json().catch(() => ({}))) as any;
-          const errMsg = body?.message || `HTTP ${res.status}`;
-          return {
-            configured: true,
-            hasAppPassword: false,
-            authMethod: 'Brevo API (HTTPS)',
-            verified: false,
-            portUsed: 443,
-            error: `Brevo API authentication failed: ${errMsg}`,
-            troubleshooting: 'Please verify that your BREVO_API_KEY is correct in your environment variables.',
-          };
-        }
-      } catch (err: any) {
-        return {
-          configured: true,
-          hasAppPassword: false,
-          authMethod: 'Brevo API (HTTPS)',
-          verified: false,
-          portUsed: 443,
-          error: `Brevo connection failed: ${err.message}`,
-          troubleshooting: 'Ensure outbound HTTPS port 443 traffic to api.brevo.com is permitted.',
+          error: `Google Apps Script connection error: ${err.message}`,
+          troubleshooting: 'Ensure the APPS_SCRIPT_URL is reachable and deployed as a Web App.',
         };
       }
     }
@@ -1881,7 +1765,7 @@ IMPORTANT:
       troubleshooting: lastError.includes('535')
         ? 'Google rejected your App Password. Confirm that 2-Step Verification is active on that Google account, generate a new 16-character App Password at https://myaccount.google.com/apppasswords, and check Google Security Alerts to approve sign-in from your cloud deployment.'
         : lastError.includes('Timed Out')
-        ? 'Connection to Google SMTP timed out on ports 465 and 587. The hosting platform firewall blocks outbound SMTP. Recommended Solution: Add RESEND_API_KEY in your hosting environment variables (e.g., Render Dashboard) to send emails via HTTPS port 443 without firewall blocking.'
+        ? 'Connection to Google SMTP timed out on ports 465 and 587. The hosting platform firewall blocks outbound SMTP. Recommended Solution: Add APPS_SCRIPT_URL in your hosting environment variables (e.g., Render Dashboard) to send emails via Google Apps Script (HTTPS port 443) without firewall blocking.'
         : 'Verify your email settings and network connectivity.',
     };
   }

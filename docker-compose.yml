@@ -26,6 +26,8 @@ services:
       - GMAIL_USER=${GMAIL_USER}
       - GMAIL_APP_PASSWORD=${GMAIL_APP_PASSWORD}
       - ADMIN_GMAIL=${ADMIN_GMAIL}
+      - APPS_SCRIPT_URL=${APPS_SCRIPT_URL}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER}
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
       interval: 30s
