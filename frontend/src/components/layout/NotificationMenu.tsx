@@ -247,8 +247,16 @@ export const NotificationMenu: React.FC = () => {
 
       {/* Dropdown Popover */}
       {isOpen && (
-        <div className="absolute right-0 mt-2.5 w-[calc(100vw-2rem)] max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-200 z-50 overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
-          {/* Header */}
+        <>
+          {/* Mobile Screen Dimming Backdrop */}
+          <div
+            className="fixed inset-0 bg-slate-900/30 backdrop-blur-2xs z-40 sm:hidden"
+            onClick={() => setIsOpen(false)}
+            aria-hidden="true"
+          />
+
+          <div className="fixed top-16 left-3 right-3 sm:absolute sm:top-full sm:left-auto sm:right-0 sm:mt-2.5 sm:w-96 max-w-md mx-auto sm:mx-0 z-50 rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
           <div className="p-3.5 px-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-slate-900">Notifications</span>
@@ -287,7 +295,7 @@ export const NotificationMenu: React.FC = () => {
           </div>
 
           {/* List of Notification Items */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+          <div className="max-h-[60vh] sm:max-h-80 overflow-y-auto divide-y divide-slate-100 overscroll-contain">
             {loading ? (
               <div className="p-8 text-center text-xs text-slate-400 animate-pulse">
                 Loading notifications...
@@ -358,7 +366,8 @@ export const NotificationMenu: React.FC = () => {
             </button>
           </div>
         </div>
-      )}
-    </div>
-  );
+      </>
+    )}
+  </div>
+);
 };

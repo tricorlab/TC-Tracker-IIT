@@ -469,19 +469,14 @@ export const AdminDashboardView: React.FC = () => {
 
           {/* Widget 3: Who is on Leave Today (Live Roster Card) */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
-            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
                   <CalendarDays className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                    <span>Who is on Leave Today</span>
-                    {data?.onLeaveToday && data.onLeaveToday.length > 0 && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80">
-                        {data.onLeaveToday.length} Out Today
-                      </span>
-                    )}
+                  <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                    Who is on Leave Today
                   </h3>
                   <span className="text-[11px] text-slate-400">
                     Active leave roster for {data?.selectedDate || 'today'}
@@ -489,13 +484,21 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
               </div>
 
-              <Link
-                to="/leave/requests"
-                className="text-xs font-semibold text-[#1a73e8] hover:text-[#1557b0] transition flex items-center gap-1"
-              >
-                <span>Leave Records</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
+              <div className="flex items-center gap-2.5 self-start sm:self-center">
+                {data?.onLeaveToday && data.onLeaveToday.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/90 shadow-2xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                    <span>{data.onLeaveToday.length} Out Today</span>
+                  </span>
+                )}
+                <Link
+                  to="/leave/requests"
+                  className="text-xs font-semibold text-[#1a73e8] hover:text-[#1557b0] transition flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200/60"
+                >
+                  <span>Leave Records</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
             </div>
 
             {data?.onLeaveToday && data.onLeaveToday.length > 0 ? (
@@ -669,13 +672,15 @@ export const AdminDashboardView: React.FC = () => {
                         </div>
 
                         {/* Activity Description */}
-                        <div className="flex-1 min-w-0">
-                          <span className="font-semibold text-slate-800">
-                            {log.Action}
+                        <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-800 truncate">
+                            {log.Action.replace(/_/g, ' ')}
                           </span>
-                          <span className="text-slate-500 text-[11px] ml-1.5 truncate">
-                            ({log.PerformedBy})
-                          </span>
+                          {(log.Reason || (log as any).Details) && (
+                            <span className="text-slate-400 text-[11px] truncate max-w-[180px] text-right font-normal">
+                              {log.Reason || (log as any).Details}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
