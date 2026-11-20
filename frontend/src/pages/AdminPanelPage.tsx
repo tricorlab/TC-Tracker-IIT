@@ -8,12 +8,19 @@ import {
   FileSpreadsheet,
   Wrench,
   ArrowRight,
+  Megaphone,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/common/PageHeader';
 
 export const AdminPanelPage: React.FC = () => {
   const tools = [
+    {
+      to: '/admin/notices',
+      title: 'Staff Notices & Email Broadcasts',
+      description: 'Publish institutional circulars, announcements, and broadcast emails directly to staff.',
+      icon: Megaphone,
+    },
     {
       to: '/admin/users',
       title: 'User & Role Management',

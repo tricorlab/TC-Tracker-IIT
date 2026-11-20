@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import { google } from 'googleapis';
 import nodemailer, { type Transporter } from 'nodemailer';
 import { googleSheetsService } from './googleSheets.service.js';
-import { SHEET_NAMES } from '../config/sheets.config.js';
+import { SHEET_NAMES, ValidNotificationStatus } from '../config/sheets.config.js';
 import { EmailLogRow } from '../types/database.types.js';
 import { userService } from './userService.js';
 
@@ -74,6 +74,17 @@ export interface PasswordResetEmailPayload {
   resetLink: string;
   otpCode: string;
   expiresInMinutes?: number;
+}
+
+export interface StaffNoticeEmailPayload {
+  noticeId: string;
+  title: string;
+  content: string;
+  category?: string;
+  priority?: 'Normal' | 'High' | 'Urgent';
+  adminName: string;
+  createdAt?: string;
+  portalUrl?: string;
 }
 
 export type CustomEmailDispatcher = (options: {
@@ -1623,6 +1634,223 @@ IMPORTANT:
     return {
       dispatched: deliveryStatus === 'Sent',
       log: logRecord,
+    };
+  }
+
+  /**
+   * Broadcast an official administrative notice to all active staff members with executive email styling.
+   */
+  public async broadcastStaffNoticeEmail(
+    recipients: { email: string; name: string }[],
+    payload: StaffNoticeEmailPayload
+  ): Promise<{
+    totalRecipients: number;
+    sentCount: number;
+    failedCount: number;
+    errors: string[];
+    logs: EmailLogRow[];
+  }> {
+    const priority = payload.priority || 'Normal';
+    const category = payload.category || 'General';
+    const portalUrl = payload.portalUrl || process.env.PORTAL_URL || process.env.FRONTEND_URL || 'http://localhost:5173/notices';
+    const attemptedAt = new Date().toISOString();
+    const displayDate = payload.createdAt
+      ? new Date(payload.createdAt).toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : new Date().toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        });
+
+    let accentColor = '#2563eb';
+    let badgeBg = '#eff6ff';
+    let badgeColor = '#1e40af';
+    let subjectPrefix = '📋 Staff Notice: ';
+
+    if (priority === 'Urgent') {
+      accentColor = '#dc2626';
+      badgeBg = '#fef2f2';
+      badgeColor = '#991b1b';
+      subjectPrefix = '🚨 [URGENT] Official Notice: ';
+    } else if (priority === 'High') {
+      accentColor = '#ea580c';
+      badgeBg = '#fff7ed';
+      badgeColor = '#9a3412';
+      subjectPrefix = '📢 [IMPORTANT] Staff Notice: ';
+    }
+
+    const emailSubject = `${subjectPrefix}${payload.title} — TC Tracker`;
+
+    const textBody = `
+============================================================
+TC TRACKER — OFFICIAL STAFF NOTICE
+============================================================
+
+TITLE:     ${payload.title}
+CATEGORY:  ${category}
+PRIORITY:  ${priority}
+ISSUED BY: ${payload.adminName} (Administration)
+DATE:      ${displayDate}
+NOTICE ID: ${payload.noticeId}
+
+------------------------------------------------------------
+NOTICE MESSAGE:
+------------------------------------------------------------
+${payload.content}
+
+------------------------------------------------------------
+View full details on the TC Tracker Portal:
+${portalUrl}
+============================================================
+`.trim();
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(payload.title)}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px; }
+    .card { background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 620px; margin: 0 auto; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
+    .top-bar { height: 6px; background-color: ${accentColor}; }
+    .header { background-color: #0e1d34; color: #ffffff; padding: 24px 28px; text-align: left; }
+    .org-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
+    .notice-title { margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; line-height: 1.35; letter-spacing: -0.01em; }
+    .body-content { padding: 28px 28px 24px; }
+    .meta-pills { margin-bottom: 18px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; margin-bottom: 6px; }
+    .meta-line { font-size: 12px; color: #64748b; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; line-height: 1.5; }
+    .message-container { background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid ${accentColor}; border-radius: 8px; padding: 20px; margin: 16px 0 24px; font-size: 14px; line-height: 1.7; color: #334155; white-space: pre-wrap; word-break: break-word; }
+    .btn-container { text-align: center; margin: 28px 0 16px; }
+    .btn { display: inline-block; background-color: #0e1d34; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.02em; }
+    .footer { background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; line-height: 1.5; }
+    .footer p { margin: 4px 0; }
+  </style>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 24px;">
+  <div class="card" style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 620px; margin: 0 auto; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+    <div class="top-bar" style="height: 6px; background-color: ${accentColor};"></div>
+    <div class="header" style="background-color: #0e1d34; color: #ffffff; padding: 24px 28px; text-align: left;">
+      <div class="org-title" style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px;">TC Tracker &bull; Official Staff Notice</div>
+      <h1 class="notice-title" style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; line-height: 1.35; letter-spacing: -0.01em;">${escapeHtml(payload.title)}</h1>
+    </div>
+    <div class="body-content" style="padding: 28px 28px 24px;">
+      <div class="meta-pills" style="margin-bottom: 18px;">
+        <span class="badge" style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; margin-bottom: 6px; background-color: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${accentColor}40;">
+          ${escapeHtml(priority)} Priority
+        </span>
+        <span class="badge" style="display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 6px; margin-bottom: 6px; background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;">
+          ${escapeHtml(category)}
+        </span>
+      </div>
+
+      <div class="meta-line" style="font-size: 12px; color: #64748b; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #f1f5f9; line-height: 1.5;">
+        <strong>Issued By:</strong> ${escapeHtml(payload.adminName)} (Administration) &bull; 
+        <strong>Date:</strong> ${escapeHtml(displayDate)}
+      </div>
+
+      <div class="message-container" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid ${accentColor}; border-radius: 8px; padding: 20px; margin: 16px 0 24px; font-size: 14px; line-height: 1.7; color: #334155; white-space: pre-wrap; word-break: break-word;">${escapeHtml(payload.content)}</div>
+
+      <div class="btn-container" style="text-align: center; margin: 28px 0 16px;">
+        <a href="${escapeHtml(portalUrl)}" class="btn" target="_blank" rel="noopener noreferrer" style="display: inline-block; background-color: #0e1d34; color: #ffffff !important; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: 0.02em;">
+          Open TC Tracker Portal &rarr;
+        </a>
+      </div>
+    </div>
+    <div class="footer" style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; line-height: 1.5;">
+      <p style="margin: 4px 0;"><strong>TC Tracker Attendance &amp; Leave Portal</strong> &bull; IIT Research Park</p>
+      <p style="margin: 4px 0;">This is an official administrative notice broadcast to all active staff members. Please do not reply directly to this automated email.</p>
+    </div>
+  </div>
+</body>
+</html>
+`.trim();
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+    const logs: EmailLogRow[] = [];
+
+    const validRecipients = recipients.filter((r) => r.email && r.email.includes('@'));
+
+    for (let i = 0; i < validRecipients.length; i++) {
+      const recipient = validRecipients[i];
+      let deliveryStatus: ValidNotificationStatus = 'Pending';
+      let sentAt = '';
+      let errorMsg = '';
+
+      const logId = `EML-NOT-${Date.now()}-${i + 1}`;
+
+      try {
+        const sendResult = await this.sendDirectEmail({
+          fromName: 'TC Tracker Administration',
+          to: recipient.email,
+          subject: emailSubject,
+          text: textBody,
+          html: htmlBody,
+        });
+
+        if (sendResult.success) {
+          deliveryStatus = 'Sent';
+          sentAt = new Date().toISOString();
+          sentCount++;
+        } else {
+          deliveryStatus = 'Failed';
+          errorMsg = sendResult.errorMessage || 'Notice email transmission failure';
+          failedCount++;
+          errors.push(`${recipient.email}: ${errorMsg}`);
+        }
+      } catch (err: any) {
+        deliveryStatus = 'Failed';
+        errorMsg = err.message || 'Unexpected notice dispatch error';
+        failedCount++;
+        errors.push(`${recipient.email}: ${errorMsg}`);
+      }
+
+      const logRecord: EmailLogRow = {
+        EmailLogID: logId,
+        RelatedLeaveRequestID: `NOTICE_${payload.noticeId}`,
+        RecipientEmail: recipient.email,
+        DeliveryStatus: deliveryStatus,
+        ErrorMessage: errorMsg,
+        AttemptedAt: attemptedAt,
+        SentAt: sentAt,
+      };
+
+      if (googleSheetsService.isLiveApiEnabled()) {
+        try {
+          await googleSheetsService.appendSheetRow(SHEET_NAMES.EMAIL_LOGS, [
+            logRecord.EmailLogID,
+            logRecord.RelatedLeaveRequestID,
+            logRecord.RecipientEmail,
+            logRecord.DeliveryStatus,
+            logRecord.ErrorMessage,
+            logRecord.AttemptedAt,
+            logRecord.SentAt,
+          ]);
+        } catch (sheetErr: any) {
+          console.error('[EmailService Error] Failed to append notice email log:', sheetErr.message);
+        }
+      }
+
+      this.mockEmailLogs.push(logRecord);
+      logs.push(logRecord);
+    }
+
+    return {
+      totalRecipients: validRecipients.length,
+      sentCount,
+      failedCount,
+      errors,
+      logs,
     };
   }
 

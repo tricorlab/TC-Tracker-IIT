@@ -16,6 +16,7 @@ import {
   ArrowRight,
   Check,
   CalendarDays,
+  Megaphone,
 } from 'lucide-react';
 
 // Mini SVG Donut for Present Today Card
@@ -183,6 +184,15 @@ export const AdminDashboardView: React.FC = () => {
           >
             <RotateCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
           </button>
+
+          <Link
+            to="/admin/notices"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-[#1a73e8] border border-blue-200 text-xs sm:text-sm font-semibold transition active:scale-95 shadow-2xs text-center"
+            title="Publish an official circular and broadcast to staff"
+          >
+            <Megaphone className="w-4 h-4 text-[#1a73e8]" />
+            <span>Staff Notice</span>
+          </Link>
 
           <Link
             to="/attendance/marking"

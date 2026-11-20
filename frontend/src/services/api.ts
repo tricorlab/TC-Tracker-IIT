@@ -1418,6 +1418,133 @@ export async function executeDriveBackupApi(customTitle?: string): Promise<{
   });
 }
 
+/* ========================================================================= */
+/* Staff Notices & Broadcast API Types & Functions                           */
+/* ========================================================================= */
+
+export interface NoticeItem {
+  NoticeID: string;
+  Title: string;
+  Content: string;
+  Category: string; // 'General' | 'Urgent' | 'Policy' | 'Holiday' | 'Event' | 'Maintenance'
+  Priority: 'Normal' | 'High' | 'Urgent';
+  TargetRole: 'All' | 'Staff' | 'Admin';
+  CreatedBy: string;
+  CreatorName: string;
+  CreatedAt: string; // ISO 8601
+  ExpiresAt?: string;
+  IsPinned: boolean | string;
+  SendEmail: boolean | string;
+  EmailStatus: 'Sent' | 'Partial' | 'Failed' | 'Skipped';
+  EmailRecipientCount: number | string;
+  Status: 'Active' | 'Archived';
+}
+
+export interface CreateNoticePayload {
+  title: string;
+  content: string;
+  category?: string;
+  priority?: 'Normal' | 'High' | 'Urgent';
+  targetRole?: 'All' | 'Staff' | 'Admin';
+  expiresAt?: string;
+  isPinned?: boolean;
+  sendEmail?: boolean;
+}
+
+export interface UpdateNoticePayload {
+  title?: string;
+  content?: string;
+  category?: string;
+  priority?: 'Normal' | 'High' | 'Urgent';
+  targetRole?: 'All' | 'Staff' | 'Admin';
+  expiresAt?: string;
+  isPinned?: boolean;
+  status?: 'Active' | 'Archived';
+}
+
+export async function fetchNotices(params?: {
+  status?: 'Active' | 'Archived' | 'All';
+  category?: string;
+  limit?: number;
+}): Promise<{ success: boolean; count: number; data: NoticeItem[] }> {
+  const query = new URLSearchParams();
+  if (params?.status) query.append('status', params.status);
+  if (params?.category && params.category !== 'All') query.append('category', params.category);
+  if (params?.limit) query.append('limit', String(params.limit));
+
+  const qs = query.toString();
+  return apiFetch(`/api/notices${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchNoticeById(id: string): Promise<{ success: boolean; data: NoticeItem }> {
+  return apiFetch(`/api/notices/${id}`);
+}
+
+export async function createNotice(payload: CreateNoticePayload): Promise<{
+  success: boolean;
+  message: string;
+  data: NoticeItem;
+  emailSummary?: {
+    totalRecipients: number;
+    sentCount: number;
+    failedCount: number;
+    errors: string[];
+  };
+}> {
+  const res = await apiFetch<{
+    success: boolean;
+    message: string;
+    data: NoticeItem;
+    emailSummary?: any;
+  }>('/api/notices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  clearClientCache('notices:');
+  clearClientCache('dashboard:');
+  return res;
+}
+
+export async function updateNotice(
+  id: string,
+  payload: UpdateNoticePayload
+): Promise<{ success: boolean; message: string; data: NoticeItem }> {
+  const res = await apiFetch<{ success: boolean; message: string; data: NoticeItem }>(`/api/notices/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+  clearClientCache('notices:');
+  clearClientCache('dashboard:');
+  return res;
+}
+
+export async function deleteNotice(id: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiFetch<{ success: boolean; message: string }>(`/api/notices/${id}`, {
+    method: 'DELETE',
+  });
+  clearClientCache('notices:');
+  clearClientCache('dashboard:');
+  return res;
+}
+
+export async function resendNoticeEmail(id: string): Promise<{
+  success: boolean;
+  message: string;
+  data: {
+    notice: NoticeItem;
+    totalRecipients: number;
+    sentCount: number;
+    failedCount: number;
+    errors: string[];
+  };
+}> {
+  const res = await apiFetch<any>(`/api/notices/${id}/resend`, {
+    method: 'POST',
+  });
+  clearClientCache('notices:');
+  return res;
+}
+
 
 
 

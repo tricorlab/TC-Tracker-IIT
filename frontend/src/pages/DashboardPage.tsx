@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { fetchStaffDashboard, fetchMyLeaveRequests } from '../services/api';
-import type { StaffDashboardData, LeaveRequestItem } from '../services/api';
+import { fetchStaffDashboard, fetchMyLeaveRequests, fetchNotices } from '../services/api';
+import type { StaffDashboardData, LeaveRequestItem, NoticeItem } from '../services/api';
 import { AdminDashboardView } from '../components/dashboard/AdminDashboardView';
 import { MonthlyHealthCard } from '../components/attendance/MonthlyHealthCard';
 import {
@@ -20,6 +20,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Megaphone,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -245,18 +246,25 @@ export const StaffDashboardView: React.FC = () => {
   const [leaveFilter, setLeaveFilter] = useState<'year' | 'month' | 'total'>('year');
   const [leaveFilterYear, setLeaveFilterYear] = useState<number>(CURRENT_DATE.getFullYear());
   const [leaveFilterMonth, setLeaveFilterMonth] = useState<number>(CURRENT_DATE.getMonth() + 1);
+  const [latestNotice, setLatestNotice] = useState<NoticeItem | null>(null);
 
   const loadDashboard = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
     setError(null);
     try {
-      const [res, reqRes] = await Promise.all([
+      const [res, reqRes, noticeRes] = await Promise.all([
         fetchStaffDashboard(),
         fetchMyLeaveRequests(),
+        fetchNotices({ status: 'Active', limit: 1 }).catch(() => null),
       ]);
       setData(res.dashboard);
       setAllRequests(reqRes.requests || (reqRes as any).data || []);
+      if (noticeRes?.data && noticeRes.data.length > 0) {
+        setLatestNotice(noticeRes.data[0]);
+      } else {
+        setLatestNotice(null);
+      }
     } catch (err: any) {
       setError(err?.message || 'Failed to load dashboard data');
     } finally {
@@ -420,6 +428,68 @@ export const StaffDashboardView: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* Latest Official Staff Notice Banner */}
+      {latestNotice && (
+        <div
+          className={`p-4 rounded-2xl border transition shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+            latestNotice.Priority === 'Urgent'
+              ? 'bg-rose-50/90 border-rose-200 text-rose-950'
+              : latestNotice.Priority === 'High'
+              ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+              : 'bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border-blue-200/90 text-blue-950'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-2xs ${
+                latestNotice.Priority === 'Urgent'
+                  ? 'bg-rose-100 text-rose-700'
+                  : latestNotice.Priority === 'High'
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-blue-600 text-white'
+              }`}
+            >
+              <Megaphone className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    latestNotice.Priority === 'Urgent'
+                      ? 'bg-rose-200/90 text-rose-900'
+                      : latestNotice.Priority === 'High'
+                      ? 'bg-amber-200/90 text-amber-900'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}
+                >
+                  {latestNotice.Priority} Notice
+                </span>
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {latestNotice.Category}
+                </span>
+                <span className="text-[11px] text-slate-400">&bull;</span>
+                <span className="text-[11px] text-slate-500">
+                  By {latestNotice.CreatorName || 'Administration'}
+                </span>
+              </div>
+              <h4 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-1">
+                {latestNotice.Title}
+              </h4>
+              <p className="text-xs text-slate-600 line-clamp-1 mt-0.5">
+                {latestNotice.Content}
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/notices"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-semibold transition shadow-2xs self-end sm:self-center cursor-pointer"
+          >
+            <span>Read Notice</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
 
       {/* 2. Prior-Year Transition Pending Notice removed per user request: data?.balance?.transitionPending */}
 

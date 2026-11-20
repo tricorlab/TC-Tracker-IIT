@@ -19,6 +19,7 @@ import {
   Calendar,
   ChevronDown,
   X,
+  Megaphone,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -139,6 +140,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onItemClick, className = '' })
                 </Link>
 
                 <Link
+                  to="/admin/notices"
+                  onClick={onItemClick}
+                  className={navItemClass(isActive('/admin/notices') || isActive('/notices'))}
+                >
+                  <Megaphone className={iconClass(isActive('/admin/notices') || isActive('/notices'))} />
+                  <span>Notices</span>
+                </Link>
+
+                <Link
                   to="/holidays"
                   onClick={onItemClick}
                   className={navItemClass(isActive('/holidays'))}
@@ -205,6 +215,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onItemClick, className = '' })
                   <CalendarDays className={iconClass(isActive('/holidays'))} />
                   <span>Holidays</span>
                 </Link>
+
+                <Link
+                  to="/notices"
+                  onClick={onItemClick}
+                  className={navItemClass(isActive('/notices'))}
+                >
+                  <Megaphone className={iconClass(isActive('/notices'))} />
+                  <span>Notices</span>
+                </Link>
               </>
             )}
           </nav>
@@ -227,6 +246,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onItemClick, className = '' })
 
             {adminToolsOpen && (
               <nav className="space-y-1">
+                <Link
+                  to="/admin/notices"
+                  onClick={onItemClick}
+                  className={navItemClass(isActive('/admin/notices'))}
+                >
+                  <Megaphone className={iconClass(isActive('/admin/notices'))} />
+                  <span>Staff Notices</span>
+                </Link>
+
                 <Link
                   to="/admin/leave-balances"
                   onClick={onItemClick}

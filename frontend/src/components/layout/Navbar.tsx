@@ -50,6 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar, sidebarOpen }) 
     if (path === '/admin/users') return 'Staff Roster';
     if (path === '/reports') return 'Reports';
     if (path === '/holidays') return 'Holidays';
+    if (path === '/admin/notices' || path === '/notices') return 'Staff Notices & Announcements';
     if (path === '/admin/activity-logs') return 'Activity Logs';
     if (path === '/admin/email-logs') return 'Email Audit';
     if (path === '/admin/leave-balances') return 'Leave Balances';

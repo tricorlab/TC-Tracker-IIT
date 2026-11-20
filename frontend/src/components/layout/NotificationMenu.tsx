@@ -9,17 +9,19 @@ import {
   ArrowRight,
   ShieldCheck,
   CheckCheck,
+  Megaphone,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
   fetchHolidays,
   fetchMyLeaveRequests,
   fetchActivityLogs,
+  fetchNotices,
 } from '../../services/api';
 
 export interface NotificationItem {
   id: string;
-  type: 'holiday' | 'leave' | 'activity' | 'policy';
+  type: 'holiday' | 'leave' | 'activity' | 'policy' | 'notice';
   title: string;
   description: string;
   link: string;
@@ -66,6 +68,26 @@ export const NotificationMenu: React.FC = () => {
     const notifications: NotificationItem[] = [];
     const todayStr = new Date().toISOString().slice(0, 10);
     const currentYear = new Date().getFullYear();
+
+    try {
+      // 0. Official Staff Notices & Directives (High priority)
+      const noticeRes = await fetchNotices({ status: 'Active', limit: 2 });
+      if (noticeRes?.data) {
+        for (const n of noticeRes.data) {
+          const isUrgent = n.Priority === 'Urgent';
+          notifications.push({
+            id: `notice-${n.NoticeID}`,
+            type: 'notice',
+            title: `${isUrgent ? '🚨 ' : ''}${n.Title}`,
+            description: `${n.Priority} Priority • ${n.Category}: ${n.Content.slice(0, 60)}${n.Content.length > 60 ? '...' : ''}`,
+            link: '/notices',
+            timestamp: n.CreatedAt ? new Date(n.CreatedAt).toLocaleDateString() : 'Notice',
+          });
+        }
+      }
+    } catch {
+      // Ignore notice fetch failure
+    }
 
     try {
       // 1. Upcoming Holidays (For both Staff & Admin)
@@ -196,6 +218,8 @@ export const NotificationMenu: React.FC = () => {
 
   const getIcon = (type: NotificationItem['type']) => {
     switch (type) {
+      case 'notice':
+        return <Megaphone className="w-4 h-4 text-indigo-600" />;
       case 'holiday':
         return <Sparkles className="w-4 h-4 text-purple-600" />;
       case 'leave':
@@ -210,6 +234,8 @@ export const NotificationMenu: React.FC = () => {
 
   const getBadgeBg = (type: NotificationItem['type']) => {
     switch (type) {
+      case 'notice':
+        return 'bg-indigo-100/80';
       case 'holiday':
         return 'bg-purple-100/80';
       case 'leave':

@@ -106,3 +106,21 @@ export interface EmailLogRow {
   AttemptedAt: string; // ISO 8601
   SentAt: string; // ISO 8601 or empty
 }
+
+export interface NoticeRow {
+  NoticeID: string;
+  Title: string;
+  Content: string;
+  Category: string; // e.g. "General", "Urgent", "Policy", "Holiday", "Event", "Maintenance"
+  Priority: 'Normal' | 'High' | 'Urgent';
+  TargetRole: 'All' | 'Staff' | 'Admin';
+  CreatedBy: string; // Admin UserID
+  CreatorName: string; // Admin Full Name
+  CreatedAt: string; // ISO 8601
+  ExpiresAt?: string; // ISO YYYY-MM-DD or empty
+  IsPinned: boolean | string; // Boolean or "TRUE" / "FALSE"
+  SendEmail: boolean | string;
+  EmailStatus: 'Sent' | 'Partial' | 'Failed' | 'Skipped';
+  EmailRecipientCount: number | string;
+  Status: 'Active' | 'Archived';
+}

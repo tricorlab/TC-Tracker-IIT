@@ -22,6 +22,7 @@ import { EmailLogsPage } from './pages/EmailLogsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { DatabaseDoctorPage } from './pages/DatabaseDoctorPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { NoticesPage } from './pages/NoticesPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { ForceChangePasswordModal } from './components/auth/ForceChangePasswordModal';
@@ -88,6 +89,14 @@ export const App: React.FC = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="notices"
+              element={
+                <ProtectedRoute allowedRoles={['Staff', 'Admin']}>
+                  <NoticesPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Operations Routes (Admin) */}
             <Route
@@ -141,6 +150,14 @@ export const App: React.FC = () => {
               element={
                 <ProtectedRoute allowedRoles={['Admin']}>
                   <AdminPanelPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/notices"
+              element={
+                <ProtectedRoute allowedRoles={['Admin']}>
+                  <NoticesPage />
                 </ProtectedRoute>
               }
             />

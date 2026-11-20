@@ -7,6 +7,7 @@ import leaveRoutes from './leave.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import userRoutes from './user.routes.js';
 import reportRoutes from './report.routes.js';
+import noticeRoutes from './notice.routes.js';
 
 const apiRouter = Router();
 
@@ -18,5 +19,6 @@ apiRouter.use('/leave', leaveRoutes);
 apiRouter.use('/dashboard', dashboardRoutes);
 apiRouter.use('/users', userRoutes);
 apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/notices', noticeRoutes);
 
 export default apiRouter;
